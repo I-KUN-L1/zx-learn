@@ -1,0 +1,22 @@
+server:
+  port: 8093
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+spring:
+  application:
+    name: message-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        enabled: false
+      config:
+        enabled: false
