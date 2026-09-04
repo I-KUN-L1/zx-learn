@@ -1,0 +1,90 @@
+# 知行智学（zx-learn）基础设施一键启动
+# 本地开发环境：MySQL 8 + Redis
+# 密码通过 .env 注入（复制 .env.example 为 .env 并填写 MYSQL_ROOT_PASSWORD / REDIS_PASSWORD）
+# 用法：docker compose up -d
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: zx-learn-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中配置 MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - zx-learn-mysql-data:/var/lib/mysql
+      - ./deploy/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  redis:
+    image: redis:7
+    container_name: zx-learn-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:?请在 .env 中配置 REDIS_PASSWORD}
+    volumes:
+      - zx-learn-redis-data:/data
+      - ./deploy/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+  # ---------- PostgreSQL（pgvector）：RAG 向量知识库，供 aigc-service 检索增强 ----------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: zx-learn-pg
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中配置 POSTGRES_PASSWORD}
+      POSTGRES_DB: zx_aigc
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - zx-learn-pg-data:/var/lib/postgresql/data
+      - ./deploy/pgvector/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  # ---------- RocketMQ（下单异步链路：优惠券核销/支付事件/超时关单） ----------
+  rocketmq-namesrv:
+    image: apache/rocketmq:4.9.7
+    container_name: zx-learn-mq-namesrv
+    restart: always
+    ports:
+      - "9876:9876"
+    command: sh mqnamesrv
+
+  rocketmq-broker:
+    image: apache/rocketmq:4.9.7
+    container_name: zx-learn-mq-broker
+    restart: always
+    depends_on:
+      - rocketmq-namesrv
+    environment:
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+      # 规避 JDK8 在 cgroup v2（Docker Desktop/WSL2）下 OperatingSystemMXBean NPE
+      # 导致 StoreUtil.<clinit> 失败、消费位点查询全挂的已知问题
+      JAVA_OPT_EXT: "-XX:-UseContainerSupport"
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+      - "10912:10912"
+    volumes:
+      - ./deploy/rocketmq/broker.conf:/home/rocketmq/rocketmq-4.9.7/conf/broker.conf:ro
+    command: sh mqbroker -c /home/rocketmq/rocketmq-4.9.7/conf/broker.conf
+
+  rocketmq-console:
+    image: apacherocketmq/rocketmq-dashboard:2.0.0
+    container_name: zx-learn-mq-console
+    restart: always
+    depends_on:
+      - rocketmq-namesrv
+    environment:
+      JAVA_OPTS: "-Drocketmq.namesrv.addr=rocketmq-namesrv:9876"
+    ports:
+      - "8080:8080"
+
+volumes:
+  zx-learn-mysql-data:
+  zx-learn-redis-data:
+  zx-learn-mq-store:
+  zx-learn-pg-data:
