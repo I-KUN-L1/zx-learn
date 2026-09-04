@@ -1,0 +1,54 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+
+### VS Code ###
+.vscode/
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Logs ###
+logs/
+*.log
+nohup.out
+
+### 运行凭据 ###
+.bootstrap-credentials
+
+### 环境变量（.env.example 为模板，保留跟踪）###
+.env
+.env.*
+!.env.example
+
+### JMeter 原始压测数据（体积过大不入库，结论数据见 docs/PERF.md）###
+perf-test/results/
+
+### 个人材料（隐私，不入库）###
+.deploy/
+perf-test/resume-quantified.md
