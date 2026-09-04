@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Scenario4-SeckillClaim" enabled="true">
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="HOST" elementType="Argument"><stringProp name="Argument.name">HOST</stringProp><stringProp name="Argument.value">localhost</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="PORT" elementType="Argument"><stringProp name="Argument.name">PORT</stringProp><stringProp name="Argument.value">8088</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="PROTOCOL" elementType="Argument"><stringProp name="Argument.name">PROTOCOL</stringProp><stringProp name="Argument.value">http</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="THREADS" elementType="Argument"><stringProp name="Argument.name">THREADS</stringProp><stringProp name="Argument.value">50</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="LOOPS" elementType="Argument"><stringProp name="Argument.name">LOOPS</stringProp><stringProp name="Argument.value">1000</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="COUPON_ID" elementType="Argument"><stringProp name="Argument.name">COUPON_ID</stringProp><stringProp name="Argument.value">1</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+        </collectionProp>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="SeckillClaim-Threads" enabled="true">
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">${__P(LOOPS,1000)}</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(THREADS,50)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">10</stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="秒杀 POST /user-coupons/seckill/{couponId}" enabled="true">
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="script"><![CDATA[import java.io.*
+import java.net.*
+import org.apache.jmeter.samplers.SampleResult
+
+String host    = props.get("HOST") as String ?: "localhost"
+int    port    = Integer.parseInt(props.get("PORT") as String ?: "8088")
+String proto   = props.get("PROTOCOL") as String ?: "http"
+String couponId= props.get("COUPON_ID") as String ?: "1"
+int    userNum = (ctx != null) ? ctx.getThreadNum() + 1 : 1
+
+// 连接复用：开启 JDK keep-alive 并提高每主机缓存上限，避免高频请求耗尽 Windows 临时端口(TIME_WAIT)
+if (System.getProperty("http.maxConnections") == null) {
+    System.setProperty("http.keepAlive", "true")
+    System.setProperty("http.maxConnections", "2000")
+}
+
+SampleResult sr = new SampleResult()
+sr.setSampleLabel("秒杀 POST /user-coupons/seckill")
+sr.sampleStart()
+long s0 = System.currentTimeMillis()
+
+URL u = new URL(proto + "://" + host + ":" + port + "/user-coupons/seckill/" + couponId)
+HttpURLConnection conn = (HttpURLConnection) u.openConnection()
+conn.setRequestMethod("POST")
+conn.setConnectTimeout(3000)
+conn.setReadTimeout(15000)
+conn.setDoOutput(true)
+conn.setDoInput(true)
+conn.setRequestProperty("Content-Type", "application/json;charset=UTF-8")
+// 每线程一个虚拟用户，模拟不同用户抢同一张券
+conn.setRequestProperty("user-info", String.valueOf(userNum))
+OutputStream os = conn.getOutputStream()
+os.flush(); os.close()
+
+int code = conn.getResponseCode()
+InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream()
+String resp = new BufferedReader(new InputStreamReader(is, "UTF-8")).getText()
+// 不调用 disconnect()：读满响应体并关闭输入流，由 JDK keep-alive 缓存复用底层连接，减少新建 socket 与 TIME_WAIT
+try { is.close() } catch (IOException ignore) {}
+
+long total = System.currentTimeMillis() - s0
+sr.sampleEnd()
+sr.setResponseCode(String.valueOf(code))
+boolean httpOk = code >= 200 && code < 300
+// 业务成功 = 网关放行且服务受理（QUEUING/SOLD_OUT/REPEAT/NOT_READY 均为有效业务结果，不算系统错误）
+boolean bizOk = resp.contains('"code":200')
+boolean rejected = resp.contains('SOLD_OUT') || resp.contains('REPEAT') || resp.contains('NOT_READY')
+sr.setSuccessful(httpOk && bizOk)
+sr.setResponseMessage("HTTP " + code + "，耗时 " + total + "ms" + (rejected ? "（业务拒绝）" : "（已受理）"))
+sr.setResponseData(resp.getBytes("UTF-8"))
+sr.setDataType(SampleResult.TEXT)
+sr.setSampleLabel(sr.getSampleLabel() + " [" + total + "ms]")
+return sr]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="interpreterClass"></stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>
