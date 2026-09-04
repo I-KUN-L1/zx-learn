@@ -1,0 +1,66 @@
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/zx_auth?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        enabled: false
+      config:
+        enabled: false
+    # 本地开发直连：关闭 Nacos 后，通过 SimpleDiscoveryClient 提供静态服务地址（生产环境删除此段并启用 Nacos）
+    discovery:
+      client:
+        simple:
+          instances:
+            user-service:
+              - uri: http://localhost:8082
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  mapper-locations: classpath*:mapper/**/*.xml
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+# JWT 签名密钥：由环境变量 ZX_JWT_SECRET 注入（见项目根目录 .env.example）
+zx:
+  jwt:
+    secret: ${ZX_JWT_SECRET}
+  admin-bootstrap:
+    # 首个管理员初始凭据落盘路径（相对应用根目录）；由环境变量 ZX_ADMIN_CREDENTIAL_FILE 覆盖
+    credential-file: ${ZX_ADMIN_CREDENTIAL_FILE:.bootstrap-credentials}
+    # 首个管理员手机号/用户名，可由环境变量覆盖
+    admin-phone: ${ZX_ADMIN_PHONE:13800000000}
+    admin-username: ${ZX_ADMIN_USERNAME:admin}
