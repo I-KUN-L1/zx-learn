@@ -60,7 +60,8 @@ rocketmq:
 
 # ------------------- 支付验签密钥（Mock 回调签名；生产由支付渠道下发） -------------------
 pay:
-  callback-secret: ${PAY_CALLBACK_SECRET:zx-learn-demo-secret}
+  # 无默认值：必须通过环境变量 PAY_CALLBACK_SECRET 注入（见 .env.example），缺失时启动失败
+  callback-secret: ${PAY_CALLBACK_SECRET:}
 
 mybatis-plus:
   configuration:
