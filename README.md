@@ -24,18 +24,8 @@
 
 ## 📸 项目预览
 
-> 🚧 素材录制中，当前为占位区。录制完成后取消注释并提交图片至 `docs/images/`。
-
-<!--
-<p align="center">
-  <img src="docs/images/preview-courses.png"  alt="课程列表"            width="420"/>
-  <img src="docs/images/preview-sse-chat.gif" alt="AI 助教 SSE 流式对话" width="420"/>
-  <img src="docs/images/preview-insight.png"  alt="学情报告 / 能力画像"  width="420"/>
-</p>
--->
-
 <details>
-<summary>🎬 素材录制方法（点击展开）</summary>
+<summary>🎬 预览素材录制方法（素材就绪后在此展示截图 / GIF）</summary>
 
 **① 终端动图（SSE 对话演示）—— asciinema 录制 + agg 转 GIF**
 
@@ -58,7 +48,7 @@ agg --cols 100 --font-size 14 --speed 1 --theme monokai \
 演示脚本（录制期间执行，展示流式输出最直观）：
 
 ```bash
-curl -N -X POST http://localhost:8080/chat/text \
+curl -N -X POST http://localhost:8080/chat \
   -H "Content-Type: application/json" \
   -d '{"sessionId":"demo","question":"帮我推荐一门 Java 课程"}'
 ```
@@ -105,8 +95,8 @@ curl -N -X POST http://localhost:8080/chat/text \
 |---|---|---|
 | 秒杀未命中拒绝路径吞吐（500 并发） | **6144 QPS · P99 150ms · 0 错误** | JMeter scenario4 阶梯压测，见 [docs/PERF.md](docs/PERF.md) §4 |
 | Redis 命中率（秒杀链路） | **≈100%**（库存键 + 用户 set 全内存，无回源） | [docs/PERF.md](docs/PERF.md) §4.4 |
-| 下单接口 P99 | `<X>` | JMeter scenario2，见 docs/PERF.md 对应章节 |
-| SSE 对话首字延迟 | `<X>` | JMeter scenario3（LLM mock 流式模式），见 docs/PERF.md §3 |
+| 下单接口 P99（同步下单链路） | **28ms @ 50 并发**（2,246 QPS · 0 错误） | JMeter scenario2 真实压测，见 [docs/PERF.md](docs/PERF.md) §6 |
+| SSE 对话首字延迟（TTFT） | **P99 17~18ms @ 50~500 并发**（LLM mock 流式，无并发退化） | JMeter scenario3 含 TTFT 子采样，见 [docs/PERF.md](docs/PERF.md) §5.2 |
 | 单元测试行覆盖率 | **35%**（随 CI 更新） | JaCoCo 报告（GitHub Actions artifact，含测试模块汇总） |
 
 ## 📖 文档导航
@@ -169,10 +159,16 @@ curl -N -X POST http://localhost:8080/chat/text \
 | zx-insight | 学情报告 / 能力画像 / 学习路径 | ✅ 完整 | 8095 |
 | zx-learning | 课表 / 学习记录 / 笔记 / 签到 | ✅ 完整 | 8086 |
 | zx-trade | 订单（雪花 ID/状态机） / 支付回调 / 超时关单 | ✅ 完整 | 8087 |
-| zx-promotion | 优惠券（券状态机/兑换码核销） / 领券 | ✅ 完整 | 8088 |
+| zx-promotion | 优惠券（券状态机/兑换码核销） / 秒杀 | ✅ 完整 | 8088 |
+| zx-exam | 考试 / 题目（扩展模块） | ✅ 可运行 | 8084 |
+| zx-media | 课程媒体资源（扩展模块） | ✅ 可运行 | 8085 |
+| zx-pay | 支付渠道对接（扩展模块） | ✅ 可运行 | 8090 |
+| zx-search | 课程搜索（扩展模块） | ✅ 可运行 | 8091 |
+| zx-remark | 课程点评（扩展模块） | ✅ 可运行 | 8092 |
+| zx-message | 站内消息（扩展模块） | ✅ 可运行 | 8093 |
+| zx-data | 数据看板（扩展模块） | ✅ 可运行 | 8094 |
 
-> ✅ 完整实现：含数据库持久化与完整业务校验。
-> 另有 7 个契约先行的扩展位（exam/media/pay/search/remark/message/data），规划见 [ROADMAP.md](docs/ROADMAP.md)。
+> ✅ 完整实现：含数据库持久化与完整业务校验；✅ 可运行：含 Application 入口与 REST 接口、可独立启动，业务纵深随 [ROADMAP.md](docs/ROADMAP.md) 持续补全（exam/media/pay/search/remark/message/data）。
 
 ---
 
@@ -299,7 +295,7 @@ ZX_LLM_ENABLED=true
 mvn test
 ```
 
-现有测试覆盖：统一响应 `RTest`、JWT 工具 `JwtToolTest`、意图路由 `RouteAgentTest`、LLM 客户端 `LlmClientTest`、SSE 并发限流 `ChatServiceLimitTest`，以及骨架模块控制器单测（exam/promotion）。
+现有测试覆盖：统一响应 `RTest`、JWT 工具 `JwtToolTest`、意图路由 `RouteAgentTest`、LLM 客户端 `LlmClientTest`、SSE 并发限流 `ChatServiceLimitTest`，以及扩展模块控制器单测（exam/promotion）。
 
 ## 📦 部署
 
@@ -332,6 +328,7 @@ mvn test
 | **未配置 LLM 的 API Key 能跑吗？** | 能。`ZX_LLM_ENABLED` 默认 `false`，`zx-aigc` 自动返回**模拟流式回复**（按真实格式带 `END` 事件），可运行、可演示、可压测。接入真实模型时在 `.env` 配 `ZX_LLM_BASE_URL / ZX_LLM_API_KEY / ZX_LLM_MODEL` 并置 `ZX_LLM_ENABLED=true`（DeepSeek 等任何 OpenAI 兼容接口均可） |
 | **没装 Redis 行不行？** | 服务照常启动：AI 会话记忆（`ChatMemory`）在 Redis 不可用时**自动降级为无记忆模式**，对话主流程可用（仅记忆/缓存相关能力缺失）。推荐 `docker compose up -d redis` 一键补齐 |
 | **端口冲突如何修改？** | 启动参数覆盖：`java -jar zx-course.jar --server.port=18083`；或改该服务 `application.yml` 的 `server.port`。注意：本地直连模式下其他服务的静态实例地址需同步更新 |
+| **本机已装 MySQL，`docker compose up` 报 3306 被占？** | 在 `.env` 中取消注释并修改 `MYSQL_BIND_PORT=13306`（compose 将容器映射到宿主机空闲端口），应用侧通过 `MYSQL_PORT` 指定实际端口即可 |
 | **MySQL 版本有要求吗？** | **MySQL 8.x**（utf8mb4 字符集）。不保证兼容 5.7 —— 连接驱动、SQL 方言均按 8.x 设计，低版本不排查兼容问题 |
 | **最小启动链路是什么？** | 只起 4 个服务即可跑通「登录 → 浏览课程」：`zx-user(8082) → zx-course(8083) → zx-auth(8081) → zx-gateway(8080)`，基础设施只需 MySQL + Redis。AI 助教加 `zx-aigc(8089)`，学情报告加 `zx-insight(8095)`，其余服务按需启动 |
 | **JDK 17 能运行吗？** | 不能。项目统一 **Java 21**（`maven.compiler.release=21`，且启用虚拟线程），CI 同样以 JDK 21 构建验证；请安装 JDK 21+ |
