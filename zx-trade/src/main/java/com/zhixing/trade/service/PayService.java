@@ -8,6 +8,7 @@ import com.zhixing.trade.domain.dto.OrderFormDTO;
 import com.zhixing.trade.domain.po.Order;
 import com.zhixing.trade.domain.po.PayRecord;
 import com.zhixing.trade.mapper.PayRecordMapper;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,8 +37,18 @@ public class PayService {
     private final OrderMsgService orderMsgService;
     private final TransactionTemplate transactionTemplate;
 
-    @Value("${pay.callback-secret:zx-learn-demo-secret}")
+    @Value("${pay.callback-secret:}")
     private String callbackSecret;
+
+    /**
+     * 验签密钥 fail-fast：无默认值，缺失时启动即失败，避免带弱默认密钥上线。
+     */
+    @PostConstruct
+    void checkCallbackSecret() {
+        if (callbackSecret == null || callbackSecret.isBlank()) {
+            throw new IllegalStateException("缺少支付回调验签密钥：请通过环境变量 PAY_CALLBACK_SECRET 配置（见 .env.example）");
+        }
+    }
 
     /**
      * 处理支付回调（幂等）：
