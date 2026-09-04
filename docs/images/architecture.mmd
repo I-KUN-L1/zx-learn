@@ -1,0 +1,26 @@
+flowchart LR
+    subgraph Client["客户端"]
+        WEB["Web / 小程序 / App"]
+    end
+    GW["zx-gateway 8080<br/>统一入口 · JWT 双 Token · RBAC"]
+    WEB --> GW
+    GW --> AUTH
+    GW --> USER
+    GW --> COURSE
+    GW --> AIGC
+    GW --> INSIGHT
+    subgraph Core["核心服务（Spring Boot 3 · Java 21）"]
+        AUTH["zx-auth<br/>登录 · JWT"]
+        USER["zx-user<br/>用户"]
+        COURSE["zx-course<br/>课程"]
+        AIGC["zx-aigc<br/>多 Agent 助教 · SSE · RAG"]
+        INSIGHT["zx-insight<br/>学情报告"]
+    end
+    subgraph Data["数据与中间件"]
+        DATA["MySQL 8 · Redis · pgvector · RocketMQ<br/>分库 · 缓存/记忆 · 向量检索 · 最终一致性"]
+    end
+    AUTH --> DATA
+    USER --> DATA
+    COURSE --> DATA
+    AIGC --> DATA
+    INSIGHT --> DATA
