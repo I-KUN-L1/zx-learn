@@ -1,6 +1,7 @@
 # 知行智学通用 Dockerfile
 # 用法：docker build --build-arg APP_NAME=zx-auth -t zx-learn/zx-auth .
-FROM itcast/openjdk:21-jdk-eclipse-temurin
+# 基础镜像用官方 Eclipse Temurin JRE（仅运行 jar，无需 JDK）
+FROM eclipse-temurin:21-jre
 
 ARG APP_NAME=zx-auth
 ENV TZ=Asia/Shanghai
