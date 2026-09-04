@@ -84,6 +84,31 @@ curl -N -X POST http://localhost:8080/chat/text \
 | 📚 **文档体系完整** | 架构图 / 接口参考 / 数据库设计 / 部署指南 / 零基础指南 / 面试题库 / 演进路线 一应俱全 |
 | 🔒 **凭据外部化** | 数据库/Redis 密码、JWT 密钥全部通过环境变量注入（见 `.env.example`），仓库零硬编码密钥 |
 
+## 🏁 已完成里程碑
+
+> 每一项均可在 [版本记录](docs/CHANGELOG.md) 中找到对应版本条目（日期 / 变更 / 影响面）。
+
+- **v1.0.0** 🧠 多 Agent 智能助教 — RouteAgent 意图路由 + 4 个业务 Agent + SSE 流式输出 + Redis 会话记忆
+- **v1.0.0** 🔐 网关统一鉴权 — JWT 双 Token 全局过滤器 + user-info 透传 + RBAC 权限模型
+- **v1.0.0** 📦 课程草稿-正式双表 — 编辑态/发布态解耦，上架原子校验
+- **v1.1.0** 🔄 订单链路最终一致性 — 本地消息表 + 课程名额状态机 + 双层幂等消费 + 超时关单双保险
+- **v1.1.1** ⚡ 优惠券秒杀 — Redis Lua 原子预扣（限领/判重/扣减一次完成）+ MQ 异步落库 + 网关令牌桶限流 + 对账自愈
+- **v1.2.0** 📚 RAG 检索增强 — pgvector + 500-token 滑窗分片 + Top3 相似召回 + SSE 断线重连/心跳
+- **v1.2.0** 📈 学情分析 — 学情报告 / 能力画像 / 学习路径推荐（"评"域闭环）
+- **v1.2.0** 🔒 凭据外部化与安全引导 — 凭据全环境变量注入零硬编码 + 首个管理员安全生成（首登强制改密）
+
+## 📊 成果与指标
+
+> 所有数值必须来自真实压测与度量（压测数据见 [docs/PERF.md](docs/PERF.md)，覆盖率见 CI JaCoCo artifact）；`<X>` 为待补测占位，禁止凭空填写。
+
+| 指标 | 结果 | 验证方式 |
+|---|---|---|
+| 秒杀未命中拒绝路径吞吐（500 并发） | **6144 QPS · P99 150ms · 0 错误** | JMeter scenario4 阶梯压测，见 [docs/PERF.md](docs/PERF.md) §4 |
+| Redis 命中率（秒杀链路） | **≈100%**（库存键 + 用户 set 全内存，无回源） | [docs/PERF.md](docs/PERF.md) §4.4 |
+| 下单接口 P99 | `<X>` | JMeter scenario2，见 docs/PERF.md 对应章节 |
+| SSE 对话首字延迟 | `<X>` | JMeter scenario3（LLM mock 流式模式），见 docs/PERF.md §3 |
+| 单元测试行覆盖率 | **35%**（随 CI 更新） | JaCoCo 报告（GitHub Actions artifact，含测试模块汇总） |
+
 ## 📖 文档导航
 
 | 文档 | 内容 |
@@ -289,15 +314,7 @@ mvn test
 
 ## 🗺️ 演进路线
 
-### 🏁 已完成里程碑
-
-- **多 Agent 智能助教**：意图路由 + 4 个业务 Agent + SSE 流式 + 会话记忆 + RAG 向量检索（[v1.0.0](docs/CHANGELOG.md)）
-- **学情分析闭环**：zx-insight 学情报告 / 能力画像 / 学习路径推荐（[v1.0.0](docs/CHANGELOG.md)）
-- **网关 JWT 双 Token 鉴权 + RBAC**：access/refresh 双 Token + user-info 透传 + 角色权限模型（[v1.0.0](docs/CHANGELOG.md)）
-- **课程草稿-正式双表**：编辑态与发布态解耦，发布原子校验（[v1.0.0](docs/CHANGELOG.md)）
-- **凭据外部化**：数据库/Redis 密码、JWT 密钥全部环境变量注入，零硬编码（[v1.0.0](docs/CHANGELOG.md)）
-
-> 后续规划（扩展位服务落地、Nacos/Sentinel/ES/前端等）见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+> 已完成里程碑见 [🏁 已完成里程碑](#-已完成里程碑) 章节；后续规划（扩展位服务落地、Nacos/Sentinel/ES/前端等）见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 ---
 
