@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.zhixing</groupId>
+        <artifactId>zx-learn</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>zx-aigc</artifactId>
+    <name>zx-aigc</name>
+    <description>AI 服务：多 Agent 智能助教、语音、向量库</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.zhixing</groupId>
+            <artifactId>zx-common</artifactId>
+            <version>${project.version}</version>
+            <exclusions>
+                <!-- aigc 使用响应式栈（WebFlux/Netty），排除 Servlet 容器，避免回退到 Tomcat 线程模型。
+                     Tomcat 默认 max-threads=200，SSE 长连接会占满工作线程导致 high 并发下 Connection refused -->
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-web</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.zhixing</groupId>
+            <artifactId>zx-api</artifactId>
+            <version>${project.version}</version>
+            <exclusions>
+                <!-- 排除 zx-api 传递引入的 redisson-spring-boot-starter 所带的 Servlet 容器，
+                     保持 aigc 走响应式 Netty，避免 SSE 长连接被 Tomcat 200 线程拖垮 -->
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-web</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- RAG 向量存储：pgvector（经 PostgreSQL JDBC 访问） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pgvector</groupId>
+            <artifactId>pgvector</artifactId>
+            <version>0.1.5</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
+        <!-- SSE 流式返回的单测断言（StepVerifier） -->
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>zx-aigc</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.zhixing.aigc.AigcApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

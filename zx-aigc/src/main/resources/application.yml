@@ -1,0 +1,64 @@
+server:
+  port: 8089
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+spring:
+  application:
+    name: aigc-service
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    # RAG 向量库：PostgreSQL + pgvector
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/zx_aigc}
+    username: ${POSTGRES_USERNAME:postgres}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        enabled: false
+      config:
+        enabled: false
+    # 本地开发直连：关闭 Nacos 后，通过 SimpleDiscoveryClient 提供静态服务地址（生产环境删除此段并启用 Nacos）
+    discovery:
+      client:
+        simple:
+          instances:
+            course-service:
+              - uri: http://localhost:8083
+            trade-service:
+              - uri: http://localhost:8087
+  codec:
+    max-in-memory-size: 10MB
+
+zx:
+  llm:
+    base-url: ${ZX_LLM_BASE_URL:https://api.openai.com}
+    api-key: ${ZX_LLM_API_KEY:}
+    model: ${ZX_LLM_MODEL:gpt-3.5-turbo}
+    enabled: ${ZX_LLM_ENABLED:false}
+    embedding-model: ${ZX_LLM_EMBEDDING_MODEL:text-embedding-3-small}
+    embedding-dimension: ${ZX_LLM_EMBEDDING_DIMENSION:1536}
+  rag:
+    chunk-size: 500
+    chunk-overlap: 50
+    top-k: 3
+    heartbeat-seconds: 15
+    replay-count: 100
+    # SSE 同时活跃连接上限（超过返回"请稍后再试"降级提示）。压测时可调小验证触发降级
+    max-concurrent-streams: 2000
