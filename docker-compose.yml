@@ -81,7 +81,8 @@ services:
     environment:
       JAVA_OPTS: "-Drocketmq.namesrv.addr=rocketmq-namesrv:9876"
     ports:
-      - "8080:8080"
+      # 宿主机 8080 预留给 zx-gateway 统一入口，控制台映射到 18080：http://localhost:18080
+      - "18080:8080"
 
 volumes:
   zx-learn-mysql-data:
