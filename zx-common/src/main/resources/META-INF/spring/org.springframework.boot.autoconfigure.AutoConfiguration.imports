@@ -1,2 +1,3 @@
 com.zhixing.common.autoconfigure.ZxCommonAutoConfiguration
 com.zhixing.common.autoconfigure.RocketMqAutoConfiguration
+com.zhixing.common.autoconfigure.FeignRDecoderAutoConfiguration

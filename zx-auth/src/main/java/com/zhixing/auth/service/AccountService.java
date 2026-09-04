@@ -46,7 +46,8 @@ public class AccountService {
         } catch (Exception e) {
             throw new UnauthorizedException("用户名或密码错误");
         }
-        if (user == null) {
+        // 防御：远程返回"无身份的空对象"（id 为 null）视为凭据错误，杜绝签发空身份 token
+        if (user == null || user.getId() == null) {
             throw new UnauthorizedException("用户名或密码错误");
         }
         if (user.getStatus() != null && user.getStatus() != 1) {
