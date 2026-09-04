@@ -4,6 +4,8 @@ import com.zhixing.api.client.user.UserClient;
 import com.zhixing.api.dto.user.BootstrapAdminDTO;
 import com.zhixing.api.dto.user.PasswordChangeDTO;
 import com.zhixing.auth.common.util.StrongPasswordGenerator;
+import com.zhixing.common.exceptions.CommonException;
+import feign.codec.DecodeException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -67,13 +69,23 @@ public class AdminBootstrapService {
 
     /**
      * 首次改密：交由 zx-user 校验原密码（BCrypt）并落库；成功后删除初始凭据文件。
+     * <p>feign 将 Decoder 抛出的业务异常包装为 {@link DecodeException}，此处解包还原
+     * RDecoder 的业务异常（如"原密码错误"→400），避免被兜底为 500；同时保证校验失败
+     * 绝不删除凭据文件（fail-closed）。</p>
      */
     public void changeBootstrapPassword(String cellPhone, String oldPassword, String newPassword) {
         PasswordChangeDTO dto = new PasswordChangeDTO();
         dto.setCellPhone(cellPhone);
         dto.setOldPassword(oldPassword);
         dto.setNewPassword(newPassword);
-        userClient.changeBootstrapPassword(dto);
+        try {
+            userClient.changeBootstrapPassword(dto);
+        } catch (DecodeException e) {
+            if (e.getCause() instanceof CommonException ce) {
+                throw ce;
+            }
+            throw e;
+        }
         deleteCredentialFile();
     }
 
