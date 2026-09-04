@@ -20,7 +20,10 @@ import org.springframework.context.annotation.Bean;
  * 仅在配置了 {@code rocketmq.name-server} 的模块生效（如 zx-trade）；
  * 未配置的模块（如响应式 zx-aigc）不会初始化 MQ，避免额外连接与依赖。
  * <ul>
- *   <li>生产者：配置 name-server 即装配 {@link RocketMQTemplate}；</li>
+ *   <li>生产者：须同时配置 {@code rocketmq.producer-group} 才装配 {@link RocketMQTemplate}
+ *       ——否则 group 为空会导致 DefaultMQProducer 启动报
+ *       {@code the specified group is blank}（仅需消费的模块如 zx-course/zx-learning
+ *       只配置 name-server + consumer-group，不应装配生产者）；</li>
  *   <li>消费者：存在 {@link MqHandler} Bean 且配置了 rocketmq.consumer-group 时，
  *       装配 {@link RocketMQConsumerContainer}（各服务须配置不同的 consumer-group）。</li>
  * </ul>
@@ -33,6 +36,7 @@ public class RocketMqAutoConfiguration {
 
     @Bean(destroyMethod = "shutdown")
     @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "rocketmq", name = "producer-group")
     public RocketMQTemplate rocketMQTemplate(RocketMQProperties properties, ObjectMapper objectMapper) {
         RocketMQTemplate template = new RocketMQTemplate(properties, objectMapper);
         template.start();
