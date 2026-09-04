@@ -30,6 +30,7 @@ param(
     [string]$Threads   = "50,100,200,500",      # 并发阶梯
     [int]$Loops        = 1000,                  # 每线程循环次数（控制采样规模）
     [string]$TargetHost = "localhost",          # 被测主机（可指向网关/负载均衡）；不能叫 Host，因其为 PS 只读自动变量
+    [string]$CouponId   = "1",                  # 秒杀场景（Scenario 4）必传预热券 ID，否则全部 NOT_READY 秒拒
     [int]$HostConn     = 10                     # 各场景间等待冷却时间(s)
 )
 
