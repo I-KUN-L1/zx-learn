@@ -1,0 +1,72 @@
+server:
+  port: 8087
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+spring:
+  application:
+    name: trade-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/zx_trade?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        enabled: false
+      config:
+        enabled: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+
+# ------------------- 本地消息表 / 分布式任务开关 -------------------
+tx:
+  order:
+    # 支付超时时间（分钟）
+    expire-minutes: 15
+    # 本地消息表补偿扫描批次大小与间隔
+    msg-scan-batch: 100
+    msg-scan-admin: 3000
+
+# ------------------- RocketMQ 配置 -------------------
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:localhost:9876}
+  producer-group: trade-producer
+  consumer-group: trade-consumer
+  # 订单超时关单延迟级别（见 broker.conf messageDelayLevel，此处 15 对应 15 分钟）
+  timeout-delay-level: 15
+  topics:
+    order-paid: zx_order_paid
+    coupon-use: zx_coupon_use
+    order-timeout: zx_order_timeout
+  tags:
+    coupon-use: USE
+    coupon-refund: REFUND
+    order-close: CLOSE
+    order-paid: PAID
+
+# ------------------- 支付验签密钥（Mock 回调签名；生产由支付渠道下发） -------------------
+pay:
+  callback-secret: ${PAY_CALLBACK_SECRET:zx-learn-demo-secret}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
