@@ -1,0 +1,26 @@
+server:
+  port: 8085
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+spring:
+  application:
+    name: media-service
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        enabled: false
+      config:
+        enabled: false
