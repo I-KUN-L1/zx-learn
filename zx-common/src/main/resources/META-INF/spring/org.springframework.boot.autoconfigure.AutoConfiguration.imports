@@ -1,0 +1,2 @@
+com.zhixing.common.autoconfigure.ZxCommonAutoConfiguration
+com.zhixing.common.autoconfigure.RocketMqAutoConfiguration
