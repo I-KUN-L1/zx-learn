@@ -3,7 +3,7 @@
   <hashTree>
     <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Scenario1-CourseDetail" enabled="true">
       <boolProp name="TestPlan.functional_mode">false</boolProp>
-      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">true</boolProp>
       <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
         <collectionProp name="Arguments.arguments">
           <elementProp name="HOST" elementType="Argument"><stringProp name="Argument.name">HOST</stringProp><stringProp name="Argument.value">localhost</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
@@ -15,6 +15,55 @@
       </elementProp>
     </TestPlan>
     <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Warmup-Threads" enabled="true">
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">${__P(WARMUP_LOOPS,20)}</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">1</stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="WARMUP 课程详情（填缓存/JIT/连接池）" enabled="true">
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="script"><![CDATA[import java.io.*
+import java.net.*
+import org.apache.jmeter.samplers.SampleResult
+
+String host  = props.get("HOST") as String ?: "localhost"
+int    port  = Integer.parseInt(props.get("PORT") as String ?: "8083")
+String proto = props.get("PROTOCOL") as String ?: "http"
+
+if (System.getProperty("http.maxConnections") == null) {
+    System.setProperty("http.keepAlive", "true")
+    System.setProperty("http.maxConnections", "2000")
+}
+
+SampleResult sr = new SampleResult()
+sr.setSampleLabel("WARMUP GET /course/1")
+sr.sampleStart()
+URL u = new URL(proto + "://" + host + ":" + port + "/course/1")
+HttpURLConnection conn = (HttpURLConnection) u.openConnection()
+conn.setRequestMethod("GET")
+conn.setConnectTimeout(3000)
+conn.setReadTimeout(15000)
+conn.setRequestProperty("user-info", "1")
+int code = conn.getResponseCode()
+InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream()
+String resp = new BufferedReader(new InputStreamReader(is, "UTF-8")).getText()
+try { is.close() } catch (IOException ignore) {}
+sr.sampleEnd()
+sr.setResponseCode(String.valueOf(code))
+sr.setSuccessful(code >= 200 && code < 300)
+sr.setResponseData(resp.getBytes("UTF-8"))
+return sr]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="interpreterClass"></stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
       <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="CourseDetail-Threads" enabled="true">
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
           <boolProp name="LoopController.continue_forever">false</boolProp>
