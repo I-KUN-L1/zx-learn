@@ -4,6 +4,84 @@
 
 ---
 
+## v1.2.4（2026-09-04）P1 批量修复：安全基线 / 文档口径 / 可移植性（RELEASE-CHECK P1×9 清零）
+
+### 问题修复
+
+| # | 问题 | 根因 | 修复方案 |
+|---|---|---|---|
+| P1-1 | 支付回调验签密钥硬编码默认值 `zx-learn-demo-secret`，与"仓库零硬编码密钥"承诺冲突 | `zx-trade` application.yml 与 PayService 均写死默认值 | 两处默认值移除（`pay.callback-secret: ${PAY_CALLBACK_SECRET:}`）；PayService `@PostConstruct` fail-fast 校验——缺失时启动即失败并提示配置 `PAY_CALLBACK_SECRET`；`.env.example` 增补该变量 |
+| P1-2 | Dockerfile 基础镜像 `itcast/openjdk:21-jdk-eclipse-temurin` 非公共镜像源，外部用户 `docker build` 拉取失败 | 私有镜像 tag | 换官方 `eclipse-temurin:21-jre`（运行期仅需 JRE） |
+| P1-3 | README 成果指标 2 行 `<X>` 占位，而 PERF.md 已有真实压测数据 | 文档不同步 | 用 PERF.md 实测值回填：下单 P99 **28ms @ 50 并发**（2,246 QPS · 0 错误）、SSE TTFT **P99 17~18ms @ 50~500 并发**（LLM mock 流式口径注记保留） |
+| P1-4 | README"📸 项目预览"为占位横幅 + 注释掉的图片标签，发布视角空占位 | 素材未录制 | 重写为折叠式"预览素材录制方法"（asciinema + agg 录 SSE 终端动图 / 截图指引），移除空占位横幅，素材就绪后展开即展示 |
+| P1-5 | 服务能力口径矛盾："16 个可运行服务" vs 脚注"7 个**契约先行**的扩展位" vs 测试章节"**骨架**模块" | 措辞自我贬低（实测 7 个扩展模块均可运行） | 全文统一"16 个可运行服务 + 2 个公共底座"，删除"契约先行/骨架"措辞，模块清单表补全 7 个扩展模块行 |
+| P1-6 | `.env.example` 缺 `POSTGRES_URL`（zx-aigc / pgvector 需要），模板不完整 | 模板遗漏 | 补 `POSTGRES_URL / POSTGRES_USERNAME / POSTGRES_PASSWORD`（RAG 向量知识库连接段） |
+| P1-7 | zx-auth/zx-user 等未用 MQ 的服务启动报 `ERROR ... RocketMQ 生产者启动失败：the specified group is blank` | zx-common MQ 自动装配**无条件**创建 RocketMQTemplate 生产者 | `rocketMQTemplate` Bean 加 `@ConditionalOnProperty(prefix = "rocketmq", name = "producer-group")` 条件装配（consumer 监听器容器已有 consumer-group 条件），未配置生产者组的服务不再初始化 |
+| P1-8 | README 预览区把 SSE 演示命令指向 `POST /chat/text`（JSON 非流式端点） | 端点笔误 | 预览演示命令改为 `curl -N -X POST http://localhost:8080/chat`（真实 `text/event-stream` 端点） |
+| P1-9 | compose mysql 固定 `3306:3306`，宿主机已装 MySQL 的机器 `docker compose up` 直接失败 | 端口写死 | 改 `"${MYSQL_BIND_PORT:-3306}:3306"`；`.env.example` 增补注释项；README FAQ 已有对应条目（`MYSQL_BIND_PORT=13306`） |
+
+### 验证
+
+- `mvn -B -ntp clean verify` 全量 19 个 reactor 模块 BUILD SUCCESS（0 failures / 0 errors）。
+- P1-7：zx-course（仅配 consumer-group）启动日志**无** "RocketMQ 生产者启动失败" ERROR（修复前必现）。
+- P1-1：zx-trade 不带 `PAY_CALLBACK_SECRET` 启动 → fail-fast 失败并输出明确提示；带上后正常启动。
+
+> **影响面**：zx-common（MQ 条件装配）· zx-trade（回调密钥 fail-fast）· Dockerfile · docker-compose.yml · .env.example · README.md（指标回填 / 预览重写 / 口径统一 / SSE 端点）· docs/RELEASE-CHECK.md（P1×9 清零，结论改判 GO）
+
+---
+
+## v1.2.3（2026-09-04）mq-console 端口冲突修复（RELEASE-CHECK P0-3）
+
+### 问题修复
+
+| # | 问题 | 根因 | 修复方案 |
+|---|---|---|---|
+| P0-3 | **rocketmq-console 占用宿主机 8080**，与 zx-gateway 统一入口冲突：`docker compose up -d` 后再启动 gateway 必然 `APPLICATION FAILED: Port 8080 was already in use` | `docker-compose.yml` 中 `rocketmq-console` 端口映射写死 `"8080:8080"`（Dashboard 容器默认端口与网关端口撞车） | 端口映射改为 **`"18080:8080"`**，宿主机 8080 预留给 zx-gateway；compose 内注释说明新地址 `http://localhost:18080`；顺带修正 `docs/TRADE-CONSISTENCY.md` 中控制台端口旧笔误（`:8180` → `:18080`） |
+
+### 验证
+
+- `docker compose config` 解析为 `published:"18080" / target:8080`；容器 Recreated 后 `0.0.0.0:18080->8080/tcp`，`http://localhost:18080/` HTTP 200。
+- 宿主机 8080 释放后实测 `java -jar zx-gateway.jar` → `Started GatewayApplication in 5.531 seconds`（修复前必失败），无 token 访问受保护接口 401（鉴权正常）。
+
+> **影响面**：docker-compose（console 映射）· docs/TRADE-CONSISTENCY.md（端口笔误）· docs/RELEASE-CHECK.md（P0-3 清零，**3 项 P0 全部清零**）
+
+---
+
+## v1.2.2（2026-09-04）网关白名单与 void Feign 吞错修复（RELEASE-CHECK P0-2）
+
+### 问题修复
+
+| # | 问题 | 根因 | 修复方案 |
+|---|---|---|---|
+| P0-2 | **网关白名单缺 `/accounts/password/first-change`**：README 验证 ③ 首登强制改密请求无 Authorization 头，被网关 401 拦截 | `JwtProperties.excludePaths` 未收录该路径 | 白名单加入 `/accounts/password/first-change` |
+| 新发现（P0 级） | **void Feign 方法业务错误信封被静默吞掉**：首次改密传错旧密码仍返回 200 成功，且 `.bootstrap-credentials` 凭据文件被误删（fail-open） | feign 对 void 返回方法默认不调用 Decoder（`InvocationContext` 中 `isVoidType && !decodeVoid` 直接返回 null）；本项目"HTTP 200 + R 包装体"约定下，`R{code!=200}` 只体现在报文里、HTTP 状态恒为 200，void 方法完全看不见 | ① `FeignRDecoderAutoConfiguration` 新增 `FeignBuilderCustomizer` 开启 `builder.decodeVoid()`，void 响应同样经过 `RDecoder`（业务码转异常），主上下文 Bean 经 `getInstances` 含祖先查找对全部 Feign 客户端生效 ② `AdminBootstrapService.changeBootstrapPassword` 解包 feign `DecodeException`（cause=`CommonException` 还原），"原密码错误"以 400 呈现，校验失败绝不删凭据文件（fail-closed） |
+
+### 验证
+
+- 单元测试：`RDecoderVoidDecodeTest`（2 例：void 方法收到 `R{400}` 必抛 `DecodeException` 且 cause/message 保留；`R{200}` 正常返回），zx-common 17 例 + zx-auth 12 例全绿。
+- 运行时 E2E（网关 18080 → zx-auth → zx-user 全链路）：① 无 token + 错误旧密码 → 400"原密码错误"、凭据文件保留（修复前 200 假成功+误删）；② 无 token + 正确旧密码 → 200、凭据文件自动删除；③ 旧密码登录 401；④ 新密码登录 200 且 token 含真实雪花身份（sub/userId/roleId）；⑤ 保护接口无 token 仍 401（白名单未过度放行）。
+
+> **影响面**：zx-gateway（白名单）· zx-common（decodeVoid 自动装配，受影响 void Feign 方法：`changeBootstrapPassword`/`deleteCartByIds`/`sendSms`）· zx-auth（改密解包 fail-closed）· docs/RELEASE-CHECK.md（P0-2 清零）
+
+---
+
+## v1.2.1（2026-09-04）认证链路修复（RELEASE-CHECK P0-1）
+
+### 问题修复
+
+| # | 问题 | 根因 | 修复方案 |
+|---|---|---|---|
+| P0-1 | **登录不校验凭据**：任意密码、甚至不存在的手机号均返回 200 + token，且 token `sub=null/userId=null`，下游受保护接口全 401 | 服务端 `CommonExceptionAdvice` 对业务异常返回 **HTTP 200 + R 包装体**；Feign 按声明类型（如 `UserDTO`）直接反序列化 R 信封，得到"全字段 null 的空对象"而非异常，`user == null` 校验形同虚设 | ① zx-common 新增 **`RDecoder`**（统一 Feign Decoder，`FeignRDecoderAutoConfiguration` 自动装配）：`code=200` 解包 `data`；`code!=200` 按业务码抛对应异常（400/401/403/404/其他）；非 R 信封（`@NoWrapper` 裸返回、非 JSON 体）按原语义直接反序列化，全兼容 ② `AccountService.login` 增加**空身份防御**：`user.getId() == null` 视为凭据错误抛 401，杜绝签发无身份 token |
+
+### 验证
+
+- 单元测试：`RDecoderTest`（11 例：信封解包 / 无 data 字段的 401 错误体 / 裸返回直解 / 泛型 List / R 目标不解包 / String 目标）+ `AccountServiceTest`（5 例：错误凭据 401 / 远程失败 401 / **空对象 401** / 禁用账号 401 / 正常登录签发带身份 token），zx-common + zx-auth 共 27 例全绿。
+- 运行时 E2E（网关 → zx-auth → zx-user 全链路）：错误密码 401 无 token；不存在手机号 401；正确凭据 200 且 token 含 `sub/userId/roleId` 真实身份（雪花 ID）；携带该 token 访问 `/courses/page` 与 `/chat/text` 均 200。
+
+> **影响面**：zx-common（RDecoder + 自动装配）· zx-auth（login 防御）· 全部依赖 zx-api Feign 客户端的服务（解码行为由"静默错数据"变为"显式异常"）· docs/RELEASE-CHECK.md（P0-1 清零）
+
+---
+
 ## v1.2.0（2026-09）RAG 检索增强与评域补全
 
 ### 里程碑（日期 / 变更 / 影响面）
