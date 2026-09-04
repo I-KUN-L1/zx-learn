@@ -221,7 +221,7 @@ tx:
 ```
 
 Docker：`docker-compose.yml` 提供 `rocketmq-namesrv` / `rocketmq-broker`（配置
-`deploy/rocketmq/broker.conf`）/ `rocketmq-dashboard`（控制台 :8180）。
+`deploy/rocketmq/broker.conf`）/ `rocketmq-dashboard`（控制台 :18080，宿主机 8080 预留给 zx-gateway）。
 
 ## 9. 涉及代码索引
 
