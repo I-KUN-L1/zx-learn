@@ -11,7 +11,8 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中配置 MYSQL_ROOT_PASSWORD}
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      # 宿主机 3306 已装 MySQL 时，在 .env 配 MYSQL_BIND_PORT=13306 等空闲端口即可避让
+      - "${MYSQL_BIND_PORT:-3306}:3306"
     volumes:
       - zx-learn-mysql-data:/var/lib/mysql
       - ./deploy/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
