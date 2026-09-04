@@ -16,8 +16,11 @@ foreach ($f in (Get-ChildItem $Dir -Filter $NameFilter | Sort-Object Name)) {
   $iTs  = [array]::IndexOf($header, 'timeStamp')
   $iEl  = [array]::IndexOf($header, 'elapsed')
   $iRc  = [array]::IndexOf($header, 'responseCode')
+  $iLabel = [array]::IndexOf($header, 'label')
   $rows = foreach ($l in ($lines | Select-Object -Skip 1)) {
     $p = $l -split ','
+    # 排除预热线程组样本（WARMUP label），只聚合压测主采样
+    if ($p[$iLabel] -like 'WARMUP*') { continue }
     [pscustomobject]@{ ts = [long]$p[$iTs]; el = [double]$p[$iEl]; rc = [string]$p[$iRc] }
   }
   if (-not $rows -or @($rows).Count -eq 0) { continue }

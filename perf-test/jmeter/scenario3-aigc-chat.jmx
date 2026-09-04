@@ -32,7 +32,8 @@
           <stringProp name="script"><![CDATA[import java.io.*
 import java.net.*
 import java.util.UUID
-import org.apache.jmeter.samplers.SampleResult
+
+// 注意：不要 import SampleResult 类，否则隐式绑定变量会被类名遮蔽（Groovy 走 static 解析报错）
 
 String host  = props.get("HOST") as String ?: "localhost"
 int    port  = Integer.parseInt(props.get("PORT") as String ?: "8089")
@@ -44,9 +45,7 @@ if (System.getProperty("http.maxConnections") == null) {
     System.setProperty("http.maxConnections", "2000")
 }
 
-SampleResult sr = new SampleResult()
-sr.setSampleLabel("WARMUP POST /chat (SSE)")
-sr.sampleStart()
+SampleResult.sampleStart()
 URL u = new URL(proto + "://" + host + ":" + port + "/chat")
 HttpURLConnection conn = (HttpURLConnection) u.openConnection()
 conn.setRequestMethod("POST")
@@ -67,11 +66,10 @@ try { while ((line = br.readLine()) != null) { if (line.indexOf('"type":"END"') 
     try { br.close() } catch (IOException ignore) {}
     try { is.close() } catch (IOException ignore) {}
 }
-sr.sampleEnd()
-sr.setResponseCode(String.valueOf(code))
-sr.setSuccessful(code >= 200 && code < 300)
-sr.setResponseData("warmup done".getBytes("UTF-8"))
-return sr]]></stringProp>
+SampleResult.sampleEnd()
+SampleResult.setResponseCode(String.valueOf(code))
+SampleResult.setSuccessful(code >= 200 && code < 300)
+SampleResult.setResponseData("warmup done".getBytes("UTF-8"))]]></stringProp>
           <stringProp name="scriptLanguage">groovy</stringProp>
           <stringProp name="interpreterClass"></stringProp>
         </JSR223Sampler>
@@ -89,16 +87,14 @@ return sr]]></stringProp>
         <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="SSE AI 对话（读流至 END）" enabled="true">
           <stringProp name="cacheKey">true</stringProp>
           <stringProp name="filename"></stringProp>
-          <stringProp name="parameters"></stringProp>
           <stringProp name="script"><![CDATA[import java.io.*
 import java.net.*
 import java.util.UUID
-import org.apache.jmeter.samplers.SampleResult
 
-String host  = ((props.get("HOST") as String) ?: "localhost")
-int    port  = Integer.parseInt(((props.get("PORT") ?: "8089") as String))
-String proto = ((props.get("PROTOCOL") as String) ?: "http")
-String question = ((props.get("QUESTION") as String) ?: "什么是微服务架构？请结合课程资料回答。")
+String host  = props.get("HOST") as String ?: "localhost"
+int    port  = Integer.parseInt(props.get("PORT") as String ?: "8089")
+String proto = props.get("PROTOCOL") as String ?: "http"
+String question = props.get("QUESTION") as String ?: "什么是微服务架构？请结合课程资料回答。"
 int    userNum  = (ctx != null) ? ctx.getThreadNum() + 1 : 1
 String sessionId = "sse-" + UUID.randomUUID().toString()
 
@@ -117,11 +113,13 @@ String body = '{"sessionId":"' + sessionId + '","question":"' + question + '"}'
 // 度量是「并发长连接容量」：每线程 = 一条活跃对话连接，进程持有的
 // 端口数 ≈ 并发线程数而非 请求数×轮次，从而避免 Windows 临时端口耗尽。
 // 因此请用小并发 × 小 LOOPS 压测（见 run-perf 注释）。
+//
+// 注意：使用 JSR223 隐式 SampleResult 变量直接读写当前采样器，
+// 若自行 new SampleResult 并 return，label/responseMessage 会被
+// wrapper 采样器覆盖，ttft 等自定义字段无法写入 CSV。
 // ============================================================
 
-SampleResult sr = new SampleResult()
-sr.setSampleLabel("SSE AI 对话")
-sr.sampleStart()
+SampleResult.sampleStart()
 long s0 = System.currentTimeMillis()
 
 URL u = new URL(proto + "://" + host + ":" + port + "/chat")
@@ -161,24 +159,12 @@ try {
     try { is.close() } catch (IOException ignore) {}
 }
 long total = System.currentTimeMillis() - s0
-sr.sampleEnd()
+SampleResult.sampleEnd()
 
-sr.setSuccessful(ended && code >= 200 && code < 300)
-sr.setResponseCode(String.valueOf(code))
-sr.setResponseMessage((ended ? "SSE END ok" : "no END") + " total=" + total + "ms ttft=" + (ttftSet ? ttft : total) + "ms")
-sr.setDataType(SampleResult.TEXT)
-sr.setResponseData(sb.toString().getBytes("UTF-8"))
-
-SampleResult ttftSub = new SampleResult()
-ttftSub.setSampleLabel("TTFT-首token")
-ttftSub.setStartTime(s0)
-ttftSub.setEndTime(s0 + (ttftSet ? ttft : total))
-ttftSub.sampleEnd()
-ttftSub.setSuccessful(true)
-ttftSub.setResponseData((String.valueOf(ttftSet ? ttft : total) + " ms").getBytes("UTF-8"))
-ttftSub.setDataType(SampleResult.TEXT)
-sr.addSubResult(ttftSub)
-return sr]]></stringProp>
+SampleResult.setSuccessful(ended && code >= 200 && code < 300)
+SampleResult.setResponseCode(String.valueOf(code))
+SampleResult.setResponseMessage((ended ? "SSE END ok" : "no END") + " total=" + total + "ms ttft=" + (ttftSet ? ttft : total) + "ms")
+SampleResult.setResponseData(sb.toString().getBytes("UTF-8"))]]></stringProp>
           <stringProp name="scriptLanguage">groovy</stringProp>
           <stringProp name="interpreterClass"></stringProp>
         </JSR223Sampler>
