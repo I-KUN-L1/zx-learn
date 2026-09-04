@@ -22,6 +22,7 @@ public class JwtProperties {
             "/accounts/login",
             "/accounts/admin/login",
             "/accounts/refresh",
+            "/accounts/password/first-change",
             "/jwks",
             "/students/register",
             "/v3/api-docs",
