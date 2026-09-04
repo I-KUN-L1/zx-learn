@@ -1,0 +1,66 @@
+server:
+  port: 8095
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+spring:
+  application:
+    name: insight-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/zx_insight?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        enabled: false
+      config:
+        enabled: false
+    # 本地直连：关闭 Nacos 后，通过 SimpleDiscoveryClient 提供静态服务地址（生产环境启用 Nacos 后删除此段）
+    discovery:
+      client:
+        simple:
+          instances:
+            learning-service:
+              - uri: http://localhost:8086
+            exam-service:
+              - uri: http://localhost:8084
+            course-service:
+              - uri: http://localhost:8083
+            user-service:
+              - uri: http://localhost:8082
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+zx:
+  llm:
+    enabled: ${ZX_LLM_ENABLED:false}
+    base-url: ${ZX_LLM_BASE_URL:https://api.openai.com}
+    api-key: ${ZX_LLM_API_KEY:}
+    model: ${ZX_LLM_MODEL:gpt-3.5-turbo}
+    # 学情报告分析阈值
+    insight:
+      weak-accuracy: 60
+      weak-progress: 40
+      recommend-limit: 3
