@@ -1,0 +1,9 @@
+packages: []
+
+# 依赖存储位置（项目本地，便于离线/无权限环境）
+storeDir: .pnpm-store
+
+# 允许执行构建脚本的依赖（pnpm v11.5+ 安全策略，值必须为布尔）
+allowBuilds:
+  esbuild: true
+  vue-demi: true
