@@ -10,6 +10,7 @@ public interface Constant {
     String REQUEST_ID_HEADER = "requestId";
     String REQUEST_ID_ATTR = "requestId";
     String USER_INFO_HEADER = "user-info";
+    String ROLE_INFO_HEADER = "role-info";
     String AUTHORIZATION_HEADER = "authorization";
 
     String HEADER_USER_ID = "userId";
