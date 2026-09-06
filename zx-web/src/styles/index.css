@@ -1,0 +1,222 @@
+/* =========================================================
+   知行智学 全局样式
+   Tailwind CSS + Element Plus + CSS 变量（支持深色主题）
+   ========================================================= */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --zx-primary: #4f46e5;
+  --zx-primary-light: #818cf8;
+  --zx-primary-bg: #eef2ff;
+  --zx-bg: #f5f6fa;
+  --zx-bg-card: #ffffff;
+  --zx-text: #1f2937;
+  --zx-text-secondary: #6b7280;
+  --zx-border: #e5e7eb;
+  --zx-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.06);
+}
+
+html.dark {
+  --zx-primary: #818cf8;
+  --zx-primary-light: #a5b4fc;
+  --zx-primary-bg: #312e81;
+  --zx-bg: #111827;
+  --zx-bg-card: #1f2937;
+  --zx-text: #f3f4f6;
+  --zx-text-secondary: #9ca3af;
+  --zx-border: #374151;
+  --zx-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  background-color: var(--zx-bg);
+  color: var(--zx-text);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== 常用组件类 ===== */
+.zx-card {
+  background: var(--zx-bg-card);
+  border-radius: 12px;
+  box-shadow: var(--zx-shadow);
+  transition:
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
+}
+
+.zx-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px 0 rgba(79, 70, 229, 0.15);
+}
+
+.zx-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.zx-text-secondary {
+  color: var(--zx-text-secondary);
+}
+
+/* AI 渐变头像 */
+.zx-ai-avatar {
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+  color: #fff;
+}
+
+/* 流式光标 */
+.zx-cursor::after {
+  content: '▍';
+  display: inline-block;
+  color: var(--zx-primary);
+  animation: zx-blink 0.9s steps(2, start) infinite;
+}
+
+@keyframes zx-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* 打字机淡入 */
+.zx-fade-in {
+  animation: zx-fade-in 0.3s ease both;
+}
+
+@keyframes zx-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== Markdown / AI 消息排版 ===== */
+.zx-markdown {
+  line-height: 1.75;
+  word-break: break-word;
+  font-size: 14px;
+}
+
+.zx-markdown h1,
+.zx-markdown h2,
+.zx-markdown h3 {
+  margin: 12px 0 8px;
+  font-weight: 600;
+}
+
+.zx-markdown p {
+  margin: 6px 0;
+}
+
+.zx-markdown ul,
+.zx-markdown ol {
+  padding-left: 20px;
+  margin: 6px 0;
+}
+
+.zx-markdown code:not(.hljs) {
+  background: var(--zx-primary-bg);
+  color: var(--zx-primary);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 13px;
+}
+
+.zx-markdown blockquote {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--zx-primary);
+  background: var(--zx-primary-bg);
+  border-radius: 0 6px 6px 0;
+}
+
+.zx-markdown table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.zx-markdown th,
+.zx-markdown td {
+  border: 1px solid var(--zx-border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+/* 代码块 */
+.code-block {
+  margin: 10px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #1f2937;
+}
+
+.code-block__header {
+  display: flex;
+  justify-content: flex-end;
+  background: #0f172a;
+  padding: 6px 12px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.code-block pre {
+  margin: 0;
+  background: #111827;
+  padding: 12px 16px;
+  overflow-x: auto;
+}
+
+.code-block code.hljs {
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c4c9d4;
+  border-radius: 3px;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+
+/* Element Plus 主题色微调 */
+:root {
+  --el-color-primary: #4f46e5;
+  --el-color-primary-light-3: #818cf8;
+  --el-color-primary-light-5: #a5b4fc;
+  --el-color-primary-light-7: #c7d2fe;
+  --el-color-primary-light-8: #dfe4ff;
+  --el-color-primary-light-9: #eef2ff;
+  --el-color-primary-dark-2: #4338ca;
+  --el-border-radius-base: 6px;
+}
