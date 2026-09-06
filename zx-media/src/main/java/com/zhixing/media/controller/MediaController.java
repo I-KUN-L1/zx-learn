@@ -1,5 +1,7 @@
 package com.zhixing.media.controller;
 
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import com.zhixing.common.exceptions.BadRequestException;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +30,7 @@ public class MediaController {
     }
 
     @PostMapping
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
     public R<Long> save(@RequestBody Map<String, Object> media) {
         if (media == null || media.get("name") == null) {
             throw new BadRequestException("媒资名称不能为空");
@@ -55,6 +58,7 @@ public class MediaController {
     }
 
     @DeleteMapping("/{mediaId}")
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
     public R<Void> delete(@PathVariable Long mediaId) {
         if (store.remove(mediaId) == null) {
             throw new BadRequestException("媒资不存在");
@@ -64,6 +68,7 @@ public class MediaController {
     }
 
     @DeleteMapping
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
     public R<Void> deleteBatch(@RequestBody Long[] mediaIds) {
         for (Long id : mediaIds) {
             store.remove(id);

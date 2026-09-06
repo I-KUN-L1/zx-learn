@@ -1,5 +1,7 @@
 package com.zhixing.user.controller;
 
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import com.zhixing.common.exceptions.BadRequestException;
 import com.zhixing.common.utils.StringUtils;
@@ -23,6 +25,7 @@ public class StudentController {
     private final UserService userService;
 
     @GetMapping("/page")
+    @RequireRole(UserRole.STAFF)
     public R<List<UserVO>> page() {
         return R.ok(userService.pageQueryUsers(2));
     }

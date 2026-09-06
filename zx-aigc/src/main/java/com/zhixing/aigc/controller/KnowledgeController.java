@@ -2,6 +2,8 @@ package com.zhixing.aigc.controller;
 
 import com.zhixing.aigc.domain.ChunkHit;
 import com.zhixing.aigc.service.KnowledgeService;
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,13 +11,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 知识库管理接口（RAG 知识入库 / 检索）
  * <p>
- * 权限：写操作（上传）要求教师(3)/员工(1)角色——网关从 JWT role claim 解析后经 role-info 头透传；
- * 查询接口（检索/预览）仅要求登录。
+ * 权限：写操作（上传）由 @RequireRole 声明为教师(3)/员工(1)——网关从 JWT role claim
+ * 解析后经 role-info 头透传，RoleInterceptor 统一校验；查询接口（检索/预览）仅要求登录。
  */
 @Slf4j
 @RestController
@@ -23,21 +24,14 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class KnowledgeController {
 
-    /** 允许管理知识库的角色（user.type）：1=员工 3=教师 */
-    private static final Set<String> KNOWLEDGE_MANAGE_ROLES = Set.of("1", "3");
-
     private final KnowledgeService knowledgeService;
 
     /**
      * 课程讲义知识入库：切片 + 向量化 + 写入 pgvector（教师权限）
      */
     @PostMapping("/upload")
-    public R<Map<String, Object>> upload(@RequestHeader(value = "role-info", required = false) String role,
-                                         @RequestBody Map<String, Object> body) {
-        if (!KNOWLEDGE_MANAGE_ROLES.contains(role)) {
-            log.warn("知识入库被拒绝：当前角色 {} 无教师/员工权限", role);
-            return R.error("仅教师或管理员可上传课程知识");
-        }
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
+    public R<Map<String, Object>> upload(@RequestBody Map<String, Object> body) {
         Long courseId = toLong(body.get("courseId"));
         Long lessonId = toLong(body.get("lessonId"));
         String title = String.valueOf(body.getOrDefault("title", ""));

@@ -1,5 +1,7 @@
 package com.zhixing.message.controller;
 
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -12,6 +14,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 短信与收件箱
+ * <p>
+ * 权限：短信发送与站内信下发为管理端操作，仅员工(1)；GET /inboxes 为用户收件箱，仅要求登录。
  */
 @Slf4j
 @RestController
@@ -21,6 +25,7 @@ public class SmsController {
     private final AtomicLong idGen = new AtomicLong(1);
 
     @PostMapping("/sms/message")
+    @RequireRole(UserRole.STAFF)
     @Async
     public R<Void> sendSms(@RequestBody Map<String, Object> message) {
         log.info("发送短信：{}", message);
@@ -28,6 +33,7 @@ public class SmsController {
     }
 
     @PostMapping("/inboxes")
+    @RequireRole(UserRole.STAFF)
     public R<Long> sendInbox(@RequestBody Map<String, Object> message) {
         Long id = idGen.getAndIncrement();
         message.put("id", id);

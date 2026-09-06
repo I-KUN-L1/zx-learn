@@ -1,5 +1,7 @@
 package com.zhixing.exam.controller;
 
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import com.zhixing.common.exceptions.BadRequestException;
 import com.zhixing.exam.domain.po.Question;
@@ -24,6 +26,7 @@ public class QuestionController {
     private final AtomicLong idGen = new AtomicLong(1);
 
     @PostMapping
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
     public R<Long> add(@RequestBody Question question) {
         if (question == null || question.getScore() == null) {
             throw new BadRequestException("题目内容不能为空");
@@ -35,6 +38,7 @@ public class QuestionController {
     }
 
     @PutMapping("/{id}")
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
     public R<Void> update(@PathVariable Long id, @RequestBody Question question) {
         if (!store.containsKey(id)) {
             throw new BadRequestException("题目不存在");
@@ -46,6 +50,7 @@ public class QuestionController {
     }
 
     @DeleteMapping("/{id}")
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
     public R<Void> delete(@PathVariable Long id) {
         Question removed = store.remove(id);
         if (removed == null) {

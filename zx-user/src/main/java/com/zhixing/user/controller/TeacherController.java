@@ -1,5 +1,7 @@
 package com.zhixing.user.controller;
 
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import com.zhixing.user.domain.vo.UserVO;
 import com.zhixing.user.service.UserService;
@@ -16,6 +18,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/teachers")
 @RequiredArgsConstructor
+@RequireRole(UserRole.STAFF)
 public class TeacherController {
 
     private final UserService userService;
