@@ -1,5 +1,7 @@
 package com.zhixing.data.controller;
 
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -9,11 +11,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 数据看板（数据存 Redis）
+ * 数据看板（数据存 Redis），管理端专属，仅员工(1)可访问
  */
 @Slf4j
 @RestController
 @RequestMapping("/data")
+@RequireRole(UserRole.STAFF)
 public class BoardController {
 
     private final StringRedisTemplate redisTemplate;

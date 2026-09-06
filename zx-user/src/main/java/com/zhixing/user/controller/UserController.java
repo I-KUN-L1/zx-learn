@@ -6,6 +6,8 @@ import com.zhixing.api.dto.user.BootstrapAdminDTO;
 import com.zhixing.api.dto.user.PasswordChangeDTO;
 import com.zhixing.api.dto.user.UserDTO;
 import com.zhixing.common.annotation.NoWrapper;
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.PageDTO;
 import com.zhixing.common.domain.PageQuery;
 import com.zhixing.common.domain.R;
@@ -81,12 +83,14 @@ public class UserController {
     // ============ 对外接口 ============
 
     @PostMapping
+    @RequireRole(UserRole.STAFF)
     public R<Void> addUser(@RequestBody UserFormDTO form) {
         userService.saveUser(form);
         return R.ok();
     }
 
     @PutMapping("/{id}")
+    @RequireRole(UserRole.STAFF)
     public R<Void> updateUser(@PathVariable Long id, @RequestBody UserFormDTO form) {
         userService.updateUser(id, form);
         return R.ok();
@@ -99,12 +103,14 @@ public class UserController {
     }
 
     @PutMapping("/{id}/password/default")
+    @RequireRole(UserRole.STAFF)
     public R<Void> resetPassword(@PathVariable Long id) {
         userService.resetPassword(id);
         return R.ok();
     }
 
     @PutMapping("/{id}/status/{status}")
+    @RequireRole(UserRole.STAFF)
     public R<Void> updateStatus(@PathVariable Long id, @PathVariable Integer status) {
         userService.updateStatus(id, status);
         return R.ok();
@@ -127,6 +133,7 @@ public class UserController {
     }
 
     @GetMapping("/page")
+    @RequireRole(UserRole.STAFF)
     public R<PageDTO<UserVO>> page(PageQuery query, @RequestParam(required = false) Integer type) {
         Page<User> page = userMapper.selectPage(query.toMpPage("id", false), null);
         return R.ok(PageDTO.of(page, u -> BeanUtils.copyBean(u, UserVO.class)));

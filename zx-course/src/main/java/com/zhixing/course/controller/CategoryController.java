@@ -1,6 +1,8 @@
 package com.zhixing.course.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import com.zhixing.course.domain.po.Category;
 import com.zhixing.course.mapper.CategoryMapper;
@@ -48,6 +50,7 @@ public class CategoryController {
     }
 
     @PostMapping("/add")
+    @RequireRole(UserRole.STAFF)
     public R<Void> add(@RequestBody Category category) {
         if (category.getLevel() == null) {
             category.setLevel(1);
@@ -60,18 +63,21 @@ public class CategoryController {
     }
 
     @PutMapping("/update")
+    @RequireRole(UserRole.STAFF)
     public R<Void> update(@RequestBody Category category) {
         categoryMapper.updateById(category);
         return R.ok();
     }
 
     @PutMapping("/disableOrEnable")
+    @RequireRole(UserRole.STAFF)
     public R<Void> disableOrEnable(@RequestBody Category category) {
         categoryMapper.updateById(category);
         return R.ok();
     }
 
     @DeleteMapping("/{id}")
+    @RequireRole(UserRole.STAFF)
     public R<Void> delete(@PathVariable Long id) {
         categoryMapper.deleteById(id);
         return R.ok();
