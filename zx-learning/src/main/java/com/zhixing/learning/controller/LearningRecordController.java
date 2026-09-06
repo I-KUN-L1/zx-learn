@@ -3,6 +3,7 @@ package com.zhixing.learning.controller;
 import com.zhixing.api.dto.learning.LearningRecordDTO;
 import com.zhixing.common.annotation.NoWrapper;
 import com.zhixing.common.domain.R;
+import com.zhixing.common.utils.OwnerAccessGuard;
 import com.zhixing.learning.domain.dto.LearningProgressDTO;
 import com.zhixing.learning.service.LearningRecordService;
 import lombok.RequiredArgsConstructor;
@@ -29,20 +30,24 @@ public class LearningRecordController {
     }
 
     /**
-     * 查询指定用户全部学习记录（内部 Feign 接口，不包装）
+     * 查询指定用户全部学习记录（内部 Feign 接口，不包装）。
+     * 防水平越权：外部用户仅可查询本人，STAFF 可查询任意用户，内部服务调用放行。
      */
     @GetMapping("/users/{userId}/all")
     @NoWrapper
     public List<LearningRecordDTO> listAll(@PathVariable("userId") Long userId) {
+        OwnerAccessGuard.checkOwnerOrInternal(userId);
         return learningRecordService.listRecords(userId);
     }
 
     /**
-     * 查询指定用户学习总时长（秒）（内部 Feign 接口，不包装）
+     * 查询指定用户学习总时长（秒）（内部 Feign 接口，不包装）。
+     * 防水平越权规则同上。
      */
     @GetMapping("/users/{userId}/sum")
     @NoWrapper
     public Long sumDuration(@PathVariable("userId") Long userId) {
+        OwnerAccessGuard.checkOwnerOrInternal(userId);
         return learningRecordService.sumDuration(userId);
     }
 }
