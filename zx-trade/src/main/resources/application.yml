@@ -25,6 +25,13 @@ spring:
         enabled: false
       config:
         enabled: false
+    # 本地开发直连：关闭 Nacos 后，通过 SimpleDiscoveryClient 提供静态服务地址（生产环境删除此段并启用 Nacos）
+    discovery:
+      client:
+        simple:
+          instances:
+            course-service:
+              - uri: http://localhost:8083
   data:
     redis:
       host: ${REDIS_HOST:localhost}
