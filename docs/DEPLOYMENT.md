@@ -128,6 +128,37 @@ java -jar zx-learning/target/zx-learning.jar \
   curl -s -X POST localhost:8086/sign-ins -H "user-info: 1"
   ```
 
+## 2.7 默认账号与初始数据
+
+执行 `sql/init.sql`（或首次 Docker 启动自动挂载执行）后系统自带以下种子数据（全部幂等，可重复执行）：
+
+| 类别 | 内容 |
+|---|---|
+| 默认学员 | `13900000001` / `123456`（纯数字） |
+| 默认教师 | `13900000002` / `123456`（纯数字，含教师职称/简介） |
+| 首个管理员 | 启动 zx-auth 自动创建：`13800000000`，初始密码为**系统预设默认值 `123456`**（可用环境变量 `ADMIN_INIT_PASSWORD` 覆盖），凭据同步写入 `.bootstrap-credentials`，首次改密后自动删除 |
+| 分类 | 后端开发 / 前端开发 / 人工智能 及 6 个二级分类 |
+| 课程 | 8 门上架课程（含 1 门免费课），封面统一 `/covers/course-XX.svg`（前端静态资源，位于 `zx-web/public/covers/`），2 门课含章节目录 |
+| 优惠券 | 新人立减券（满 50 减 10，进行中） |
+
+## 2.8 图片存储（OSS）配置
+
+zx-media（8085）支持阿里云 OSS 与本地磁盘双模式，通过环境变量切换（见 `.env.example`）：
+
+| 变量 | 说明 |
+|---|---|
+| `MEDIA_STORAGE_MODE` | `auto`（默认，OSS 配置齐备即用 OSS，否则本地兜底）/ `oss`（强制，缺失配置启动失败）/ `local` |
+| `MEDIA_LOCAL_DIR` | 本地存储目录，默认 `./data/media` |
+| `OSS_ENDPOINT` | 如 `https://oss-cn-hangzhou.aliyuncs.com` |
+| `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | 阿里云 AccessKey（建议 RAM 子账号，仅授权目标 Bucket） |
+| `OSS_BUCKET` | 存储桶名 |
+| `OSS_URL_PREFIX` | 可选，CDN 加速域名；为空用 `bucket.endpoint` 默认域名 |
+
+- **本地兜底模式**：上传返回 `/api/files/view/{key}`，经前端代理/网关由媒体服务回源输出；
+- **OSS 模式**：图片直传 OSS，访问接口 302 重定向到对象存储/CDN 地址；
+- 上传接口 `POST /files` 需员工/教师登录；`GET /files/view/**` 已加入网关白名单供公开浏览（课程封面）。
+- Bucket 建议开启公共读（或配合 `OSS_URL_PREFIX` 使用 CDN 鉴权），凭据仅经 `.env` 注入，严禁入库。
+
 ## 3. Docker 容器化部署
 
 ### 3.1 基础设施（MySQL + Redis）一键启动

@@ -24,3 +24,18 @@ spring:
         enabled: false
       config:
         enabled: false
+
+zx:
+  media:
+    storage:
+      # 存储模式：auto（配置了 OSS 则用 OSS，否则本地磁盘兜底）/ oss / local
+      mode: ${MEDIA_STORAGE_MODE:auto}
+      # 本地存储目录（local/auto 兜底模式使用）
+      local-dir: ${MEDIA_LOCAL_DIR:./data/media}
+      oss:
+        endpoint: ${OSS_ENDPOINT:}
+        access-key-id: ${OSS_ACCESS_KEY_ID:}
+        access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+        bucket: ${OSS_BUCKET:}
+        # 自定义访问域名（CDN 加速域名，可选；为空则用 bucket.endpoint 默认域名）
+        url-prefix: ${OSS_URL_PREFIX:}

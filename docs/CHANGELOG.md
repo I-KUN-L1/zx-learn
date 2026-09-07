@@ -3,6 +3,61 @@
 
 ---
 
+## v1.3.1（2026-09-07）数据增强：默认账号 / 种子数据 / 阿里云 OSS 图片存储 / 管理员预设密码
+
+### 新增
+
+| # | 内容 | 说明 |
+|---|---|---|
+| N-1 | 默认学员/教师种子账号 | `13900000001`（学员）/`13900000002`（教师），密码均为纯数字 `123456`（BCrypt 入库，`INSERT IGNORE` 幂等），教师含职称/简介详情 |
+| N-2 | 初始测试数据 | 3 个一级 + 9 个二级分类；8 门上架课程（1 门免费课，封面齐全，2 门含章节目录）；进行中满减券（满 50 减 10） |
+| N-3 | 课程封面 | 8 张渐变风格 SVG 封面（`zx-web/public/covers/`），首页/列表/详情/管理端/购物车/学习页全链路渲染 |
+| N-4 | 阿里云 OSS 图片存储 | zx-media 新增 `MediaStorage` 抽象 + `OssMediaStorage`/`LocalStorageMediaStorage` 双实现；`auto` 模式 OSS 配齐自动启用、否则本地磁盘兜底；`oss` 强制模式缺失配置 fail-fast。图片上传（员工/教师鉴权、白名单扩展名、10MB 上限）+ 公开访问（网关白名单 `/files/view/**`，OSS 302 / 本地回源） |
+| N-5 | 管理员预设密码 | 引导逻辑由强随机改为系统预设默认值 `123456`（`ADMIN_INIT_PASSWORD` 可覆盖），保证"初次运行生成的管理员密码与预设一致"；`StrongPasswordGenerator` 移除 |
+
+### 变更
+
+- `.env.example`/`.env` 新增 `ADMIN_INIT_PASSWORD`、`MEDIA_STORAGE_MODE`、`MEDIA_LOCAL_DIR`、`OSS_ENDPOINT/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET/OSS_URL_PREFIX`（凭据仅经环境变量注入，零硬编码）
+- 网关 `JwtProperties` 白名单新增 `/files/view/**`（仅图片公开访问，上传仍需鉴权）
+- 现有库管理员密码已重置为预设值，`.bootstrap-credentials` 同步更新；遗留课程 id=1 补齐封面
+- 文档：DEPLOYMENT 新增 §2.7 默认账号与初始数据、§2.8 OSS 配置；API-REFERENCE 媒资服务契约更新（POST /files + GET /files/view/{key}）
+
+### 验证
+
+- 学员/教师/管理员三账号登录全绿；课程分页 API 返回 9 条含 `coverUrl` 数据
+- 上传：管理员 token 上传 PNG → 200 返回 url；未登录上传 → 401 拒绝；`GET /files/view/{key}` 匿名 200 回源输出
+- 浏览器 E2E 5/5：首页/列表/详情封面全部渲染（naturalWidth 有效），无 404 破图
+- zx-media 启动日志确认本地兜底模式生效（`媒体存储模式：本地磁盘`）
+
+> **影响面**：sql/init.sql（种子）· zx-auth（引导预设密码）· zx-media（OSS 集成，pom+yml+4 新类+FileController 重写）· zx-gateway（白名单）· zx-web/public/covers/（9 张 SVG）· .env.example · README · docs
+
+---
+
+## v1.3.0（2026-09-07）全面技术审查：登录超时专项 / 竞态缺陷 / 超时与重试体系
+
+### 问题修复
+
+| # | 问题 | 根因 | 修复方案 |
+|---|---|---|---|
+| P1-1 | 401 续期重放无防护：刷新成功后重放仍 401 会陷入"刷新↔重放"二次死循环 | 重放请求未标记，拦截器可无限次续期 | `RetryConfig`（`_retry`/`_retryCount`）扩展字段，成功/错误两条拦截器路径均限制同一请求最多续期重放一次 |
+| P1-2 | 网关无 httpclient 超时：下游挂起/无监听时连接无限等待，登录表现为长时间"假死" | Spring Cloud Gateway 默认 response-timeout 不生效（无限） | `connect-timeout: 2s` + `response-timeout: 30s` + `pool.type: elastic`；aigc SSE 路由单独 metadata 15 分钟不被全局超时误杀 |
+| P1-3 | `closeExpired` 竞态退券：条件更新未命中（支付与关单并发，rows=0）仍退券 + 释放名额，已支付订单被错误补偿 | 预检后到条件更新间状态可被改变，但 rows 结果未被检查 | rows=0 时跳过全部补偿并记日志；单测改写为断言正确语义（原测试恰断言了缺陷行为） |
+| P1-4 | `markPaid` 读-改-写非原子：并发支付回调双触发权益发放事件 | `selectById`+`updateById` 非 CAS | 条件更新 `WHERE status=待支付` 原子迁移；rows=0 时重查区分"重复回调幂等返回"与"状态非法抛错" |
+| P2-1 | 缺必填参/坏 JSON/类型不匹配/404/405 全部返回 500"系统繁忙" | `CommonExceptionAdvice` 缺 400 系 handler，落入兜底 Exception | 补 `MissingServletRequestParameterException`/`HttpMessageNotReadableException`/`MethodArgumentTypeMismatchException`（400）、`NoResourceFoundException`（404）、`HttpRequestMethodNotSupportedException`（405） |
+| P2-2 | 网络抖动/超时/网关 5xx 直接报错，弱网体验差 | 无请求重试机制 | 仅幂等 GET：指数退避（300ms/600ms+抖动）自动重试 2 次；条件=无响应/HTTP 502-504/R code 408/502-504；耗尽后保留全局提示 |
+| P2-3 | 网关 CORS `allowed-origins: "*"` 过宽且与 withCredentials 语义不匹配 | 全局放行任意来源 | `allowedOriginPatterns`（localhost:5173/5174）+ `allow-credentials: true` |
+
+### 验证
+
+- 单测：`mvn -pl zx-common,zx-trade -am test` BUILD SUCCESS（OrderServiceTest 3 个用例按新语义改写）。
+- 前端：`vue-tsc --noEmit` 通过。
+- 回归：`zx_selftest.ps1` 认证链路全绿（登录/错误密码 401/refresh Cookie 续期/RBAC/限流/订单）；未通过项均为 10 个服务未启动的环境因素。
+- E2E（浏览器）：登录流程 8/8——错误密码仅 1 次请求无死循环、正确登录跳转、业务页免弹窗。
+- 结构：删除根目录 `jmeter.log`（4.5MB 运行残留）。
+
+
+---
+
 
 ### 问题修复
 

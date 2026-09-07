@@ -75,10 +75,12 @@ event: end       → {"type":"end"}
 | GET | /questions/scores?ids= | 批量查分值 |
 | GET | /questions/numOfTeacher | 教师题目数 |
 
-## 6. 媒资服务（media · 8085，骨架）
+## 6. 媒资服务（media · 8085）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
+| POST | /files | 图片上传（员工/教师；jpg/jpeg/png/webp/gif，≤10MB），返回 `{key,name,url}` |
+| GET | /files/view/{key} | 图片公开访问（网关白名单）：OSS 模式 302 到对象存储，本地模式服务回源 |
 | GET | /medias | 媒资分页 |
 | POST | /medias | 保存媒资信息 |
 | GET | /medias/signature/upload | 上传签名 |
@@ -86,7 +88,10 @@ event: end       → {"type":"end"}
 | GET | /medias/signature/preview | 预览签名 |
 | DELETE | /medias/{mediaId} | 删除媒资 |
 | DELETE | /medias | 批量删除 |
-| POST | /files/upload | 文件上传 |
+
+> 存储模式：未配置 OSS 时自动降级本地磁盘（`MEDIA_LOCAL_DIR`，默认 `./data/media`），
+> 上传返回的 url 为 `/api/files/view/{key}`（浏览器经前端代理/网关可访问）；
+> 配置 `OSS_ENDPOINT/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET` 后直传 OSS。
 
 ## 7. 学习服务（learning · 8086，骨架）
 

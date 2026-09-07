@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="960" viewBox="0 0 1280 960">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#064e3b"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="960" fill="url(#g)"/>
+  <circle cx="1120" cy="140" r="230" fill="#ffffff" opacity="0.08"/>
+  <circle cx="140" cy="860" r="300" fill="#ffffff" opacity="0.06"/>
+  <circle cx="1180" cy="820" r="90" fill="#ffffff" opacity="0.10"/>
+  <text x="80" y="210" font-family="'JetBrains Mono','Consolas',monospace" font-size="64" font-weight="700" fill="#ffffff" opacity="0.45">&lt;/&gt;</text>
+  <text x="80" y="450" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="96" font-weight="700" fill="#ffffff">Vue 3 + TS</text>
+  <text x="80" y="570" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="96" font-weight="700" fill="#ffffff">前端工程化</text>
+  <rect x="80" y="640" width="360" height="64" rx="32" fill="#ffffff" opacity="0.18"/>
+  <text x="120" y="684" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="36" fill="#ffffff">知行智学 · 前端开发</text>
+</svg>

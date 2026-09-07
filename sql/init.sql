@@ -148,7 +148,21 @@ CREATE TABLE IF NOT EXISTS `user_detail` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户详情表';
 
 -- 首个管理员不再在脚本中硬编码凭据：由 zx-auth 启动时的安全引导生成
--- （检测到无管理员时生成强随机密码，BCrypt 加密入库，凭据写入 .bootstrap-credentials）
+-- （检测到无管理员时使用系统预设密码（默认 123456，可用 ADMIN_INIT_PASSWORD 覆盖），
+--   BCrypt 加密入库，凭据写入 .bootstrap-credentials，首次改密后自动删除）
+
+-- ===================== 默认账号种子数据（密码均为纯数字 123456） =====================
+-- BCrypt hash of '123456': $2a$10$OuwRvnFKhKxYDdlndTfjXOzhWRnUF6jTJ6xZEnFlQHkAwcud6rELG
+-- 默认学员：13900000001 / 123456
+INSERT IGNORE INTO `user` (`id`, `cell_phone`, `username`, `password`, `name`, `type`, `status`, `create_time`, `update_time`, `deleted`) VALUES
+(2001, '13900000001', 'student001', '$2a$10$OuwRvnFKhKxYDdlndTfjXOzhWRnUF6jTJ6xZEnFlQHkAwcud6rELG', '知行学员', 2, 1, NOW(), NOW(), 0);
+-- 默认教师：13900000002 / 123456
+INSERT IGNORE INTO `user` (`id`, `cell_phone`, `username`, `password`, `name`, `type`, `status`, `create_time`, `update_time`, `deleted`) VALUES
+(2002, '13900000002', 'teacher001', '$2a$10$OuwRvnFKhKxYDdlndTfjXOzhWRnUF6jTJ6xZEnFlQHkAwcud6rELG', '知行教师', 3, 1, NOW(), NOW(), 0);
+
+-- 教师详情（职称/简介，供教师主页展示）
+INSERT IGNORE INTO `user_detail` (`id`, `user_id`, `job_title`, `intro`, `create_time`, `update_time`, `deleted`) VALUES
+(2102, 2002, '高级讲师', '十年一线研发与教学经验，主讲 Java 后端与微服务架构课程。', NOW(), NOW(), 0);
 
 -- ===================== 课程服务库 zx_course =====================
 CREATE DATABASE IF NOT EXISTS `zx_course` DEFAULT CHARACTER SET utf8mb4;
@@ -243,6 +257,38 @@ INSERT INTO `category` (`id`, `name`, `parent_id`, `level`, `status`, `sort`) VA
 (12, 'Python', 1, 2, 1, 2),
 (13, 'Go', 1, 2, 1, 3)
 ON DUPLICATE KEY UPDATE `name` = `name`;
+
+-- 补充二级分类（前端/人工智能）
+INSERT IGNORE INTO `category` (`id`, `name`, `parent_id`, `level`, `status`, `sort`) VALUES
+(21, 'Vue.js', 2, 2, 1, 1),
+(22, 'React', 2, 2, 1, 2),
+(31, '大模型应用', 3, 2, 1, 1);
+
+-- ===================== 初始课程种子数据（封面托管于阿里云 OSS，对象级公共读） =====================
+-- 教师统一为默认教师 2002；价格单位为分；封面源文件位于 zx-web/public/covers/（已上传 OSS covers/ 前缀）
+INSERT IGNORE INTO `course` (`id`, `name`, `cover_url`, `price`, `category_id_lv1`, `category_id_lv2`, `teacher_id`, `status`, `free`, `publish_times`, `description`, `chapter_count`, `subject_count`, `sold`, `create_time`, `update_time`, `deleted`) VALUES
+(3001, 'Java 21 核心技术：从入门到精通', 'https://zx-learn.oss-cn-beijing.aliyuncs.com/covers/course-01.svg', 19900, 1, 11, 2002, 1, 0, 2, '系统讲解 Java 21 新特性、并发编程与 JVM 调优，配有大纲级实战案例，助你夯实后端核心功底。', 3, 12, 1232, NOW(), NOW(), 0),
+(3002, 'Spring Boot 3 企业级实战', 'https://zx-learn.oss-cn-beijing.aliyuncs.com/covers/course-02.svg', 29900, 1, 11, 2002, 1, 0, 1, '以真实电商项目为载体，覆盖 Spring Boot 3 全家桶、微服务治理与上线部署全流程。', 4, 18, 866, NOW(), NOW(), 0),
+(3003, 'Python 数据分析与机器学习入门', 'https://zx-learn.oss-cn-beijing.aliyuncs.com/covers/course-03.svg', 15900, 1, 12, 2002, 1, 0, 1, '从 NumPy/Pandas 到 scikit-learn 建模，零基础掌握数据分析全链路与常用算法。', 3, 10, 731, NOW(), NOW(), 0),
+(3004, 'Go 语言高并发编程实战', 'https://zx-learn.oss-cn-beijing.aliyuncs.com/covers/course-04.svg', 25900, 1, 13, 2002, 1, 0, 1, 'goroutine/channel 深入剖析，结合网关与限流实战掌握 Go 高并发服务设计。', 3, 9, 388, NOW(), NOW(), 0),
+(3005, 'Vue 3 + TypeScript 前端工程化', 'https://zx-learn.oss-cn-beijing.aliyuncs.com/covers/course-05.svg', 16900, 2, 21, 2002, 1, 0, 1, '组合式 API、Pinia 状态管理与 Vite 工程化实践，构建可维护的中大型前端项目。', 4, 14, 1024, NOW(), NOW(), 0),
+(3006, 'React 18 状态管理与性能优化', 'https://zx-learn.oss-cn-beijing.aliyuncs.com/covers/course-06.svg', 18900, 2, 22, 2002, 1, 0, 1, 'Hooks 心智模型、并发特性与渲染性能调优，写出高性能可测试的 React 应用。', 3, 11, 512, NOW(), NOW(), 0),
+(3007, '大模型应用开发：RAG 与 Agent', 'https://zx-learn.oss-cn-beijing.aliyuncs.com/covers/course-07.svg', 39900, 3, 31, 2002, 1, 0, 1, '从 Prompt 工程到向量检索与 Agent 编排，手把手构建生产级大模型应用。', 4, 16, 1588, NOW(), NOW(), 0),
+(3008, 'Java 入门第一课（免费）', 'https://zx-learn.oss-cn-beijing.aliyuncs.com/covers/course-08.svg', 0, 1, 11, 2002, 1, 1, 1, '零基础免费入门课：环境搭建、第一个程序与开发工具选择，带你轻松开启 Java 之旅。', 1, 2, 5210, NOW(), NOW(), 0);
+
+-- 课程目录种子（Java 核心技术 3001：2 章 4 节）
+INSERT IGNORE INTO `course_catalogue` (`id`, `course_id`, `name`, `media_id`, `index`, `chapter_type`, `parent_id`, `duration`, `trailer`, `create_time`, `update_time`, `deleted`) VALUES
+(4101, 3001, '第一章 Java 生态与开发环境', NULL, 1, 1, 0, NULL, 0, NOW(), NOW(), 0),
+(4102, 3001, '1.1 JDK 21 安装与配置', NULL, 1, 2, 4101, 600, 1, NOW(), NOW(), 0),
+(4103, 3001, '1.2 第一个 Java 程序', NULL, 2, 2, 4101, 720, 0, NOW(), NOW(), 0),
+(4104, 3001, '第二章 面向对象基础', NULL, 2, 1, 0, NULL, 0, NOW(), NOW(), 0),
+(4105, 3001, '2.1 类与对象', NULL, 1, 2, 4104, 900, 0, NOW(), NOW(), 0),
+(4106, 3001, '2.2 封装、继承与多态', NULL, 2, 2, 4104, 1100, 0, NOW(), NOW(), 0);
+-- 课程目录种子（免费课 3008：1 章 2 节）
+INSERT IGNORE INTO `course_catalogue` (`id`, `course_id`, `name`, `media_id`, `index`, `chapter_type`, `parent_id`, `duration`, `trailer`, `create_time`, `update_time`, `deleted`) VALUES
+(4201, 3008, '第一章 走进 Java', NULL, 1, 1, 0, NULL, 0, NOW(), NOW(), 0),
+(4202, 3008, '1.1 课程导学', NULL, 1, 2, 4201, 300, 1, NOW(), NOW(), 0),
+(4203, 3008, '1.2 开发工具选择', NULL, 2, 2, 4201, 480, 0, NOW(), NOW(), 0);
 
 -- ===================== 学习服务库 zx_learning =====================
 CREATE DATABASE IF NOT EXISTS `zx_learning` DEFAULT CHARACTER SET utf8mb4;
@@ -537,6 +583,10 @@ CREATE TABLE IF NOT EXISTS `coupon` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_exchange_code` (`exchange_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='优惠券表';
+
+-- 初始优惠券种子（进行中的满减券：满 50 减 10，供领券/下单链路测试）
+INSERT IGNORE INTO `coupon` (`id`, `name`, `type`, `discount_amount`, `threshold_amount`, `total_num`, `issued_num`, `status`, `valid_begin_time`, `valid_end_time`, `create_time`, `update_time`, `deleted`) VALUES
+(6001, '新人立减券', 1, 1000, 5000, 1000, 0, 1, '2026-09-01 00:00:00', '2026-12-31 23:59:59', NOW(), NOW(), 0);
 
 CREATE TABLE IF NOT EXISTS `user_coupon` (
     `id` BIGINT NOT NULL,
