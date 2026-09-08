@@ -6,13 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
-import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 统一异常处理
@@ -78,15 +76,6 @@ public class CommonExceptionAdvice {
     }
 
     /**
-     * 缺失必填请求参数（如 GET 缺 query 参数）：返回 400 而非落入兜底 500。
-     */
-    @ExceptionHandler(MissingServletRequestParameterException.class)
-    public R<Void> handleMissingParam(MissingServletRequestParameterException e) {
-        log.warn("缺少必填参数：{}", e.getMessage());
-        return R.error(400, "缺少必填参数：" + e.getParameterName());
-    }
-
-    /**
      * 请求体不可读（JSON 格式错误/类型不匹配）：返回 400。
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -105,21 +94,22 @@ public class CommonExceptionAdvice {
     }
 
     /**
-     * 请求资源不存在（无对应处理器/静态资源）：返回 404 而非 500。
+     * ResponseStatusException：位于 spring-web，Servlet/WebFlux 双栈通用。
+     * WebFlux 栈的未匹配路由（reactive NoResourceFoundException 为其子类）与
+     * 方法不支持（MethodNotAllowedException）按原始状态码映射，避免落入兜底 500；
+     * Servlet 栈的 NoResourceFoundException 继承 ServletException，
+     * 由 ServletCommonExceptionAdvice（更高 @Order）优先处理，互不干扰。
      */
-    @ExceptionHandler(NoResourceFoundException.class)
-    public R<Void> handleNoResource(NoResourceFoundException e) {
-        log.warn("资源不存在：{}", e.getResourcePath());
-        return R.error(404, "接口不存在");
-    }
-
-    /**
-     * HTTP 方法不支持（如对只读端点发 DELETE）：返回 405。
-     */
-    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public R<Void> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
-        log.warn("HTTP 方法不支持：{}", e.getMessage());
-        return R.error(405, "请求方法不支持");
+    @ExceptionHandler(ResponseStatusException.class)
+    public R<Void> handleResponseStatus(ResponseStatusException e) {
+        int status = e.getStatusCode().value();
+        String msg = switch (status) {
+            case 404 -> "接口不存在";
+            case 405 -> "请求方法不支持";
+            default -> e.getReason() != null ? e.getReason() : "请求处理失败：" + status;
+        };
+        log.warn("请求状态异常 {}: {}", status, e.getMessage());
+        return R.error(status, msg);
     }
 
     @ExceptionHandler(Exception.class)
