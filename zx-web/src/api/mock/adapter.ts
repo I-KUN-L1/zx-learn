@@ -56,37 +56,35 @@ const routes: MockRoute[] = [
   /* ---------- 认证 ---------- */
   {
     method: 'post',
-    pattern: /^\/accounts\/admin\/login$/,
+    pattern: /^\/accounts\/login$/,
     handler: ({ data }) => {
       const cellPhone = String(data.cellPhone ?? '')
       const password = String(data.password ?? '')
       if (!cellPhone || !password) return R_ERR(400, '手机号或密码不能为空')
-      if (cellPhone !== '13800000001' || password.length < 6) return R_ERR(401, '用户名或密码错误')
-      const firstLogin = password === 'admin123' && !localStorage.getItem(FIRST_CHANGED_KEY)
+      // 统一登录：角色由账号属性（后端）决定，这里按手机号模拟
+      const isAdmin = cellPhone === '13800000001'
+      const firstLogin = isAdmin && password === 'admin123' && !localStorage.getItem(FIRST_CHANGED_KEY)
+      if (password.length < 6) return R_ERR(401, '用户名或密码错误')
       return {
-        accessToken: `mock-admin-token-${Date.now()}`,
+        accessToken: isAdmin ? `mock-admin-token-${Date.now()}` : `mock-student-token-${Date.now()}`,
         expireTime: Date.now() + 30 * 60 * 1000,
-        refreshToken: `mock-admin-refresh-${Date.now()}`,
+        refreshToken: isAdmin ? `mock-admin-refresh-${Date.now()}` : `mock-student-refresh-${Date.now()}`,
         userId: 1,
-        username: '管理员小知',
+        username: isAdmin ? '管理员小知' : '知行学员',
         firstLogin,
       }
     },
   },
   {
     method: 'post',
-    pattern: /^\/accounts\/login$/,
+    pattern: /^\/students\/register$|^\/teachers\/register$/,
     handler: ({ data }) => {
       const cellPhone = String(data.cellPhone ?? '')
       const password = String(data.password ?? '')
       if (!cellPhone || !password) return R_ERR(400, '手机号或密码不能为空')
-      return {
-        accessToken: `mock-student-token-${Date.now()}`,
-        expireTime: Date.now() + 30 * 60 * 1000,
-        refreshToken: `mock-student-refresh-${Date.now()}`,
-        userId: 1,
-        username: '知行学员',
-      }
+      if (!/^1\d{10}$/.test(cellPhone)) return R_ERR(400, '手机号格式不正确')
+      if (password.length < 6) return R_ERR(400, '密码至少 6 位')
+      return null
     },
   },
   {

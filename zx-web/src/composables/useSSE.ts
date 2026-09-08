@@ -71,7 +71,7 @@ export function useSSE() {
             return
           }
           if (response.status === 401) {
-            const { forceLogout } = await import('@/api/request')
+            const { forceLogout } = await import('@/utils/loginPrompt')
             await forceLogout()
           }
           throw new Error(`SSE 连接失败：${response.status}`)

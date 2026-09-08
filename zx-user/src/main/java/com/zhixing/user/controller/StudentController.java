@@ -32,12 +32,26 @@ public class StudentController {
 
     @PostMapping("/register")
     public R<Void> register(@RequestBody UserFormDTO form) {
-        if (StringUtils.isBlank(form.getCellPhone()) || StringUtils.isBlank(form.getPassword())) {
-            throw new BadRequestException("手机号或密码不能为空");
-        }
+        validateRegister(form);
+        // 角色由后端强制指定为学员(2)，忽略客户端传入的 type，防止越权注册管理员
         form.setType(2);
         userService.saveUser(form);
         return R.ok();
+    }
+
+    /**
+     * 注册参数校验：手机号格式、密码强度（与前端规则一致）。
+     */
+    private void validateRegister(UserFormDTO form) {
+        if (StringUtils.isBlank(form.getCellPhone()) || StringUtils.isBlank(form.getPassword())) {
+            throw new BadRequestException("手机号或密码不能为空");
+        }
+        if (!form.getCellPhone().matches("^1\\d{10}$")) {
+            throw new BadRequestException("手机号格式不正确");
+        }
+        if (form.getPassword().length() < 6) {
+            throw new BadRequestException("密码至少 6 位");
+        }
     }
 
     @PutMapping("/password")

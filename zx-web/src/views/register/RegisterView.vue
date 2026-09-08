@@ -2,15 +2,11 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { Lock, Iphone } from '@element-plus/icons-vue'
-import { useUserStore } from '@/stores/user'
-import { useAuth } from '@/composables/useAuth'
-import { IS_MOCK } from '@/utils/auth'
+import { Lock, Iphone, User } from '@element-plus/icons-vue'
+import { registerStudent, registerTeacher, type RegisterFormDTO } from '@/api/auth'
 import AgreementDialog from '@/components/auth/AgreementDialog.vue'
 
 const router = useRouter()
-const userStore = useUserStore()
-const { handleLoginSuccess } = useAuth()
 const agreementRef = ref<InstanceType<typeof AgreementDialog>>()
 
 /** 查看协议正文（阻止冒泡避免切换勾选状态） */
@@ -18,13 +14,19 @@ function openAgreement(tab: 'user' | 'privacy') {
   agreementRef.value?.open(tab)
 }
 
+type RoleKey = 'student' | 'teacher'
+
 const formRef = ref<FormInstance>()
 const loading = ref(false)
-/** 登录协议勾选：未勾选不允许登录 */
+const role = ref<RoleKey>('student')
+/** 注册协议勾选：未勾选不允许注册 */
 const agreed = ref(false)
-const form = reactive({
+const form = reactive<RegisterFormDTO & { confirmPassword: string }>({
   cellPhone: '',
   password: '',
+  username: '',
+  name: '',
+  confirmPassword: '',
 })
 
 const rules: FormRules = {
@@ -32,43 +34,53 @@ const rules: FormRules = {
     { required: true, message: '请输入手机号', trigger: 'blur' },
     { pattern: /^1\d{10}$/, message: '手机号格式不正确', trigger: 'blur' },
   ],
+  username: [{ max: 30, message: '用户名不能超过 30 个字符', trigger: 'blur' }],
+  name: [{ max: 30, message: '姓名不能超过 30 个字符', trigger: 'blur' }],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码至少 6 位', trigger: 'blur' },
   ],
-}
-
-/** 回车提交 */
-async function onEnter() {
-  if (formRef.value) {
-    await formRef.value.validate().catch(() => Promise.reject())
-  }
-  await submit()
+  confirmPassword: [
+    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    {
+      validator: (_rule, value: string, callback) => {
+        if (value !== form.password) callback(new Error('两次输入的密码不一致'))
+        else callback()
+      },
+      trigger: 'blur',
+    },
+  ],
 }
 
 async function submit() {
-  // 登录协议校验：未勾选时提醒并阻止提交
+  // 注册协议校验：未勾选时提醒并阻止提交
   if (!agreed.value) {
-    ElMessage.warning('请先勾选同意《用户协议》与《隐私政策》后再登录')
+    ElMessage.warning('请先勾选同意《用户协议》与《隐私政策》后再注册')
     return
   }
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
   loading.value = true
   try {
-    // 统一登录：角色由后端账号属性决定（教师/管理员/学员共用同一入口）
-    await userStore.login({ cellPhone: form.cellPhone, password: form.password })
-    ElMessage.success('登录成功')
-    await handleLoginSuccess(form.cellPhone)
+    // 管理员账号仅后端创建：自助注册仅支持学员/教师，角色由后端强制指定
+    const payload: RegisterFormDTO = {
+      cellPhone: form.cellPhone,
+      password: form.password,
+      username: form.username || undefined,
+      name: form.name || undefined,
+    }
+    if (role.value === 'teacher') {
+      await registerTeacher(payload)
+    } else {
+      await registerStudent(payload)
+    }
+    ElMessage.success('注册成功，请登录')
+    await router.replace('/login')
   } catch {
-    /* 拦截器已提示 */
+    /* 拦截器已提示（如手机号已注册） */
   } finally {
     loading.value = false
   }
-}
-
-if (IS_MOCK) {
-  ElMessage.info('Mock 演示：管理端账号 13800000001 / admin123（首次登录 admin123 会触发强制改密）')
 }
 </script>
 
@@ -83,41 +95,57 @@ if (IS_MOCK) {
         </RouterLink>
         <div>
           <h1 class="text-3xl font-extrabold leading-snug text-white">
-            知学合一，<br />AI 伴你每一程
+            加入知行智学，<br />开启高效学习
           </h1>
           <p class="mt-4 text-indigo-100">
-            围绕「知 - 学 - 行 - 评」闭环，AI 助教 / 学情画像 / 个性化路径，高效学习平台。
+            注册即享 AI 助教、学情报告与个性化学习路径。管理员账号由系统后台创建。
           </p>
-          <div class="mt-8 flex gap-3">
-            <span class="zx-login-chip">AI 助教</span>
-            <span class="zx-login-chip">学情报告</span>
-            <span class="zx-login-chip">个性化路径</span>
-          </div>
         </div>
         <p class="text-xs text-indigo-200">© 2026 ZhiXing Learn · Spring Cloud 微服务 + Vue 3</p>
       </div>
 
       <!-- 右侧表单 -->
       <div class="flex-1 bg-white p-8 dark:bg-[#1f2937] sm:p-12">
-        <h2 class="text-2xl font-bold">欢迎回来</h2>
-        <p class="zx-text-secondary mt-2 text-sm">登录后开启你的智慧学习之旅</p>
+        <h2 class="text-2xl font-bold">注册新账号</h2>
+        <p class="zx-text-secondary mt-2 text-sm">目前支持学员与教师注册</p>
 
         <el-form
           ref="formRef"
           :model="form"
           :rules="rules"
           size="large"
-          class="mt-8"
-          @keyup.enter="onEnter"
+          class="mt-6"
+          @keyup.enter="submit"
         >
+          <el-form-item>
+            <el-radio-group v-model="role">
+              <el-radio-button value="student">学员注册</el-radio-button>
+              <el-radio-button value="teacher">教师注册</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
           <el-form-item prop="cellPhone">
             <el-input v-model="form.cellPhone" placeholder="手机号" :prefix-icon="Iphone" maxlength="11" />
+          </el-form-item>
+          <el-form-item prop="username">
+            <el-input v-model="form.username" placeholder="用户名（选填）" :prefix-icon="User" maxlength="30" />
+          </el-form-item>
+          <el-form-item prop="name">
+            <el-input v-model="form.name" placeholder="姓名（选填）" :prefix-icon="User" maxlength="30" />
           </el-form-item>
           <el-form-item prop="password">
             <el-input
               v-model="form.password"
               type="password"
-              placeholder="密码"
+              placeholder="密码（至少 6 位）"
+              :prefix-icon="Lock"
+              show-password
+            />
+          </el-form-item>
+          <el-form-item prop="confirmPassword">
+            <el-input
+              v-model="form.confirmPassword"
+              type="password"
+              placeholder="确认密码"
               :prefix-icon="Lock"
               show-password
             />
@@ -125,7 +153,7 @@ if (IS_MOCK) {
           <el-form-item>
             <el-checkbox v-model="agreed">
               <span class="zx-text-secondary text-sm">
-                登录即代表同意
+                注册即代表同意
                 <a class="text-primary" @click.stop.prevent="openAgreement('user')">《用户协议》</a>与<a class="text-primary" @click.stop.prevent="openAgreement('privacy')">《隐私政策》</a>
               </span>
             </el-checkbox>
@@ -139,16 +167,15 @@ if (IS_MOCK) {
               :loading="loading"
               @click="submit"
             >
-              {{ loading ? '登录中…' : '登 录' }}
+              {{ loading ? '注册中…' : '注 册' }}
             </el-button>
           </el-form-item>
         </el-form>
 
         <div class="zx-text-secondary mt-4 flex items-center justify-between text-xs">
-          <span v-if="IS_MOCK">Mock 账号：13800000001 / admin123</span>
-          <a class="cursor-pointer text-primary" @click="router.push('/register')">注册新账号</a>
+          <span>已有账号？</span>
+          <a class="cursor-pointer text-primary" @click="router.push('/login')">去登录</a>
         </div>
-        <p class="zx-text-secondary mt-2 text-xs">管理员账号由系统后台创建，如需开通请联系管理员</p>
       </div>
     </div>
     <AgreementDialog ref="agreementRef" />
@@ -166,13 +193,5 @@ if (IS_MOCK) {
 }
 .zx-login-banner {
   background: linear-gradient(150deg, #4f46e5 0%, #7c3aed 60%, #9333ea 100%);
-}
-.zx-login-chip {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
-  padding: 4px 14px;
-  font-size: 12px;
 }
 </style>

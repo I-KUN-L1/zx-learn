@@ -24,13 +24,17 @@ public class SignInController {
         return R.ok(signInService.checkIn(UserContext.getUserId()));
     }
 
+    /** 今日是否已签到 */
     @GetMapping("/today")
-    public R<SignIn> today() {
-        return R.ok(signInService.today(UserContext.getUserId()));
+    public R<Boolean> today() {
+        return R.ok(signInService.today(UserContext.getUserId()) != null);
     }
 
+    /** 签到日期列表（yyyy-MM-dd） */
     @GetMapping
-    public R<List<SignIn>> list() {
-        return R.ok(signInService.list(UserContext.getUserId()));
+    public R<List<String>> list() {
+        return R.ok(signInService.list(UserContext.getUserId()).stream()
+                .map(s -> s.getSignDate().toString())
+                .toList());
     }
 }

@@ -19,7 +19,8 @@ export function useAuth() {
 
   async function handleLogout() {
     await userStore.logout()
-    await router.replace('/login')
+    // 自由浏览策略：登出后回首页，不强制跳转登录页
+    await router.replace('/')
   }
 
   return { handleLoginSuccess, handleLogout }

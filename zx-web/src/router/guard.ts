@@ -1,13 +1,17 @@
 import type { Router } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { IS_MOCK } from '@/utils/auth'
+import { promptLogin } from '@/utils/loginPrompt'
 
 /**
- * 全局路由守卫：
- * 1. 未登录 → 跳登录页（记录回跳地址）
- * 2. 首次登录 → 强制改密（改密成功前无法访问其他页面）
+ * 全局路由守卫（公共/业务两级访问控制）：
+ * 1. 公共模块（首页、课程中心、课程详情等）自由浏览，不受登录状态影响
+ * 2. 业务模块（requiresAuth 路由：学习中心、下单、考试、消息、管理端等）：
+ *    未登录访问时弹窗提醒，确认则前往登录页（带回跳地址），取消则留在当前页；
+ *    已登录但会话超时期间的业务请求 401，由 axios 拦截器按同样策略提示
+ * 3. 首次登录 → 强制改密（改密成功前无法访问其他页面）
  *
- * 权限不在前端判定：页面入口全部放行，接口访问由后端统一鉴权，
+ * 权限不在前端判定：接口访问由后端统一鉴权，
  * 无权限时后端返回 403，axios 拦截器跳转 /403 页。
  */
 export function setupRouterGuard(router: Router) {
@@ -34,16 +38,18 @@ export function setupRouterGuard(router: Router) {
       return true
     }
 
-    // 未登录 → 登录页（记录回跳地址）
-    if (to.meta.requiresAuth && !userStore.isLoggedIn) {
-      return { path: '/login', query: { redirect: to.fullPath } }
-    }
-
     // 首次登录强制改密：改密成功前无法访问其他页面
     if (userStore.isLoggedIn && userStore.firstLogin) {
       return { path: '/password/first-change' }
     }
 
+    // 未登录访问业务模块：弹窗提醒后决定去向（公共模块自由浏览，不受影响）
+    if (to.matched.some((r) => r.meta.requiresAuth) && !userStore.isLoggedIn) {
+      const goLogin = await promptLogin()
+      return goLogin ? { path: '/login', query: { redirect: to.fullPath } } : false
+    }
+
+    // 其余页面放行（公共模块自由浏览）
     return true
   })
 

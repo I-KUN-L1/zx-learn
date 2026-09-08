@@ -8,7 +8,7 @@ import {
   setRefreshToken,
   setToken,
 } from '@/utils/auth'
-import { adminLogin, login as loginApi, logout as logoutApi } from '@/api/auth'
+import { login as loginApi, logout as logoutApi } from '@/api/auth'
 import type { LoginFormDTO, LoginResultVO } from '@/types/api'
 
 /**
@@ -44,15 +44,15 @@ export const useUserStore = defineStore('user', () => {
     setToken(result.accessToken)
     setRefreshToken(result.refreshToken)
     userId.value = result.userId
-    username.value = result.username
+    username.value = result.username ?? ''
     firstLogin.value = result.firstLogin ?? false
     setLoginUser({ ...result, firstLogin: firstLogin.value })
   }
 
-  /** 登录（admin=true 走管理端登录接口） */
-  async function login(form: LoginFormDTO, admin = false) {
+  /** 统一登录：角色由后端账号属性决定（前端不做管理端/学员端区分） */
+  async function login(form: LoginFormDTO) {
     pendingCellPhone.value = form.cellPhone
-    const result = admin ? await adminLogin(form) : await loginApi(form)
+    const result = await loginApi(form)
     applyLogin(result)
     return result
   }

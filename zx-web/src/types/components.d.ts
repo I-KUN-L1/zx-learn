@@ -9,6 +9,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AdminLayout: typeof import('./../components/layout/AdminLayout.vue')['default']
+    AgreementDialog: typeof import('./../components/auth/AgreementDialog.vue')['default']
     AppFooter: typeof import('./../components/layout/AppFooter.vue')['default']
     AppHeader: typeof import('./../components/layout/AppHeader.vue')['default']
     ChatMessageItem: typeof import('./../components/ai/ChatMessageItem.vue')['default']
@@ -21,6 +22,7 @@ declare module 'vue' {
     ElCalendar: typeof import('element-plus/es')['ElCalendar']
     ElCarousel: typeof import('element-plus/es')['ElCarousel']
     ElCarouselItem: typeof import('element-plus/es')['ElCarouselItem']
+    ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
     ElCollapse: typeof import('element-plus/es')['ElCollapse']
     ElCollapseItem: typeof import('element-plus/es')['ElCollapseItem']
     ElConfigProvider: typeof import('element-plus/es')['ElConfigProvider']

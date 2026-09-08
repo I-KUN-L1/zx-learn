@@ -32,7 +32,7 @@ export function myLearningRecords(userId: number | string) {
 
 /** 今日签到状态 */
 export function signInToday() {
-  return request.get<{ signed: boolean }>('/sign-ins/today')
+  return request.get<boolean>('/sign-ins/today')
 }
 
 /** 签到 */

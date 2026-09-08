@@ -122,7 +122,7 @@ async function fetchSign() {
   try {
     const [dates, todayRes] = await Promise.all([signInDates(), signInToday()])
     signDates.value = dates
-    signedToday.value = todayRes.signed
+    signedToday.value = todayRes
   } catch {
     /* ignore */
   }

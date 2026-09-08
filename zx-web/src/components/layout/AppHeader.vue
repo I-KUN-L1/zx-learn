@@ -63,16 +63,17 @@ async function onLogout() {
           <el-button :icon="appStore.dark ? Sunny : Moon" circle text @click="appStore.toggleTheme()" />
         </el-tooltip>
 
-        <!-- 未登录 -->
+        <!-- 未登录：自由浏览，登录/注册入口常驻 -->
         <template v-if="!userStore.isLoggedIn">
+          <el-button round @click="router.push('/register')">注册</el-button>
           <el-button type="primary" round @click="router.push('/login')">登录</el-button>
         </template>
 
         <!-- 用户下拉 -->
         <el-dropdown v-else trigger="click" @command="(cmd: string) => cmd === 'logout' ? onLogout() : router.push(cmd)">
           <span class="flex cursor-pointer items-center gap-2">
-            <el-avatar :size="34" class="zx-ai-avatar">{{ userStore.username.slice(0, 1) }}</el-avatar>
-            <span class="hidden max-w-24 truncate md:inline">{{ userStore.username }}</span>
+            <el-avatar :size="34" class="zx-ai-avatar">{{ userStore.username?.slice(0, 1) || '知' }}</el-avatar>
+            <span class="hidden max-w-24 truncate md:inline">{{ userStore.username || '知行用户' }}</span>
             <el-icon class="text-secondary"><ArrowDown /></el-icon>
           </span>
           <template #dropdown>

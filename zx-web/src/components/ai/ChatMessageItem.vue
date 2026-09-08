@@ -30,7 +30,7 @@ const courseRefs = computed(() =>
     <!-- 头像 -->
     <el-avatar v-if="!isUser" :size="36" class="zx-ai-avatar shrink-0">AI</el-avatar>
     <el-avatar v-else :size="36" class="shrink-0" style="background: var(--zx-primary)">
-      {{ userStore.username.slice(0, 1) || '我' }}
+      {{ userStore.username?.slice(0, 1) || '我' }}
     </el-avatar>
 
     <!-- 气泡 -->

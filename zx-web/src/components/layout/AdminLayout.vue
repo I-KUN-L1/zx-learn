@@ -68,8 +68,8 @@ const breadcrumb = computed(() => {
           </el-breadcrumb-item>
         </el-breadcrumb>
         <div class="ml-auto flex items-center gap-3">
-          <el-avatar :size="30" class="zx-ai-avatar">{{ userStore.username.slice(0, 1) }}</el-avatar>
-          <span class="text-sm">{{ userStore.username }}</span>
+          <el-avatar :size="30" class="zx-ai-avatar">{{ userStore.username?.slice(0, 1) || '知' }}</el-avatar>
+          <span class="text-sm">{{ userStore.username || '知行用户' }}</span>
         </div>
       </header>
 
