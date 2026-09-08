@@ -1,4 +1,4 @@
-server:
+﻿server:
   port: 8081
 
 management:
@@ -64,3 +64,5 @@ zx:
     # 首个管理员手机号/用户名，可由环境变量覆盖
     admin-phone: ${ZX_ADMIN_PHONE:13800000000}
     admin-username: ${ZX_ADMIN_USERNAME:admin}
+    # 系统预设初始密码（纯数字，默认 123456，与默认学员/教师种子账号一致）
+    init-password: ${ADMIN_INIT_PASSWORD:123456}

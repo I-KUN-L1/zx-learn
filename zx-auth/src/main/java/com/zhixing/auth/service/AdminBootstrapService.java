@@ -3,7 +3,6 @@ package com.zhixing.auth.service;
 import com.zhixing.api.client.user.UserClient;
 import com.zhixing.api.dto.user.BootstrapAdminDTO;
 import com.zhixing.api.dto.user.PasswordChangeDTO;
-import com.zhixing.auth.common.util.StrongPasswordGenerator;
 import com.zhixing.common.exceptions.CommonException;
 import feign.codec.DecodeException;
 import lombok.extern.slf4j.Slf4j;
@@ -20,12 +19,18 @@ import java.time.format.DateTimeFormatter;
 
 /**
  * 首个管理员安全引导：
- * <p>服务启动时若无管理员账号，则生成强随机密码并调用 zx-user 以 BCrypt 加密入库，
+ * <p>服务启动时若无管理员账号，则以系统预设默认密码（{@value #DEFAULT_INIT_PASSWORD}，
+ * 可通过环境变量 {@code ADMIN_INIT_PASSWORD} 覆盖）调用 zx-user 以 BCrypt 加密入库，
  * 同时将初始凭据写入应用根目录的 {@code .bootstrap-credentials} 文件（应被 git 忽略）。</p>
+ * <p>预设密码保证"初次运行生成的管理员密码与系统预设默认值一致"，便于初始化配置与管理；
+ * 登录后应立即通过 POST /accounts/password/first-change 修改密码（成功后凭据文件自动删除）。</p>
  */
 @Slf4j
 @Service
 public class AdminBootstrapService {
+
+    /** 系统预设默认管理员密码（与默认学员/教师种子账号一致，均为纯数字） */
+    public static final String DEFAULT_INIT_PASSWORD = "123456";
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -33,19 +38,23 @@ public class AdminBootstrapService {
     private final Path credentialFile;
     private final String adminPhone;
     private final String adminUsername;
+    private final String initPassword;
 
     public AdminBootstrapService(UserClient userClient,
                                  @Value("${zx.admin-bootstrap.credential-file:.bootstrap-credentials}") String credentialFile,
                                  @Value("${zx.admin-bootstrap.admin-phone:13800000000}") String adminPhone,
-                                 @Value("${zx.admin-bootstrap.admin-username:admin}") String adminUsername) {
+                                 @Value("${zx.admin-bootstrap.admin-username:admin}") String adminUsername,
+                                 @Value("${zx.admin-bootstrap.init-password:123456}") String initPassword) {
         this.userClient = userClient;
         this.credentialFile = resolve(credentialFile);
         this.adminPhone = adminPhone;
         this.adminUsername = adminUsername;
+        this.initPassword = (initPassword == null || initPassword.isBlank())
+                ? DEFAULT_INIT_PASSWORD : initPassword;
     }
 
     /**
-     * 启动引导：已存在凭据文件或已存在管理员则跳过；否则生成密码、落库并写入凭据文件。
+     * 启动引导：已存在凭据文件或已存在管理员则跳过；否则以预设密码落库并写入凭据文件。
      */
     public void bootstrapIfNeeded() {
         if (Files.exists(credentialFile)) {
@@ -56,14 +65,13 @@ public class AdminBootstrapService {
             log.info("已存在管理员账号，跳过管理员引导");
             return;
         }
-        String rawPassword = StrongPasswordGenerator.generateStrong();
         BootstrapAdminDTO dto = new BootstrapAdminDTO();
         dto.setCellPhone(adminPhone);
         dto.setUsername(adminUsername);
-        dto.setPassword(rawPassword);
+        dto.setPassword(initPassword);
         userClient.createBootstrapAdmin(dto);
-        writeCredentialFile(rawPassword);
-        log.warn("已生成首个管理员初始凭据并写入 {}，首次登录后请立即通过 POST /accounts/password/first-change 修改密码",
+        writeCredentialFile(initPassword);
+        log.warn("已使用系统预设密码创建首个管理员并写入 {}，首次登录后请立即通过 POST /accounts/password/first-change 修改密码",
                 credentialFile.toAbsolutePath());
     }
 

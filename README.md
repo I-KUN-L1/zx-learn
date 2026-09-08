@@ -214,7 +214,8 @@ mvn -pl zx-insight spring-boot:run   # 8095（可选）
 
 ```bash
 # ① 获取首个管理员账号与初始密码
-#    启动 zx-auth 后，查看应用根目录下生成的 .bootstrap-credentials 文件获取手机号与初始密码
+#    启动 zx-auth 后，若数据库无管理员，会以系统预设默认密码（123456，可用环境变量
+#    ADMIN_INIT_PASSWORD 覆盖）自动创建管理员，凭据写入根目录 .bootstrap-credentials
 cat .bootstrap-credentials
 
 # ② 登录获取 accessToken
