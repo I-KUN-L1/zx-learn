@@ -188,6 +188,7 @@ cp .env.example .env
 
 > 各服务通过 `${VAR}` 占位符读取环境变量；仓库内不包含任何默认密码或硬编码密钥。
 > `.env` 会被 **docker compose 与全部后端服务自动读取**（服务通过 `spring.config.import` 加载工作目录下 `./.env` 或 `../.env`），无需手动 export；前提是**从仓库根目录或其一级子目录启动服务**（`mvn -pl <module> spring-boot:run`、`java -jar target/*.jar`、IDEA 默认工作目录均满足）。
+> ✅ **已实测验证**：在不含任何环境变量的全新终端中启动 zx-user（Servlet 栈）与 zx-aigc（WebFlux 栈，`POSTGRES_PASSWORD` 无默认值），两者 health 组件 MySQL / PostgreSQL / Redis 均为 **UP**，确认凭据全部由 `.env` 自动注入成功。OS 环境变量优先级高于 `.env`，Docker 容器内无 `.env` 文件时 `optional:` 导入静默跳过，互不干扰。
 
 ### 3. 初始化基础设施与数据库
 
