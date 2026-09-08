@@ -3,11 +3,16 @@ package com.zhixing.common.advice;
 import com.zhixing.common.domain.R;
 import com.zhixing.common.exceptions.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 统一异常处理
@@ -70,6 +75,51 @@ public class CommonExceptionAdvice {
         String msg = getFirstMessage(e);
         log.warn("参数绑定失败：{}", msg);
         return R.error(400, msg);
+    }
+
+    /**
+     * 缺失必填请求参数（如 GET 缺 query 参数）：返回 400 而非落入兜底 500。
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public R<Void> handleMissingParam(MissingServletRequestParameterException e) {
+        log.warn("缺少必填参数：{}", e.getMessage());
+        return R.error(400, "缺少必填参数：" + e.getParameterName());
+    }
+
+    /**
+     * 请求体不可读（JSON 格式错误/类型不匹配）：返回 400。
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public R<Void> handleNotReadable(HttpMessageNotReadableException e) {
+        log.warn("请求体解析失败：{}", e.getMessage());
+        return R.error(400, "请求体格式错误");
+    }
+
+    /**
+     * 参数类型不匹配（如路径参数应为数字却传入字符串）：返回 400。
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public R<Void> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.warn("参数类型不匹配：{}", e.getMessage());
+        return R.error(400, "参数类型不匹配：" + e.getName());
+    }
+
+    /**
+     * 请求资源不存在（无对应处理器/静态资源）：返回 404 而非 500。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public R<Void> handleNoResource(NoResourceFoundException e) {
+        log.warn("资源不存在：{}", e.getResourcePath());
+        return R.error(404, "接口不存在");
+    }
+
+    /**
+     * HTTP 方法不支持（如对只读端点发 DELETE）：返回 405。
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public R<Void> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        log.warn("HTTP 方法不支持：{}", e.getMessage());
+        return R.error(405, "请求方法不支持");
     }
 
     @ExceptionHandler(Exception.class)

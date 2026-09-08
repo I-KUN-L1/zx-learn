@@ -142,25 +142,30 @@ class OrderServiceTest {
     }
 
     @Test
-    void markPaidTransitionsAndPublishesAfter() {
+    void markPaidTransitionsAtomically() {
+        // 条件更新（status=待支付）命中：状态真正迁移，返回 true
         Order order = new Order();
         order.setId(1L);
         order.setStatus(0);
         when(orderMapper.selectById(1L)).thenReturn(order);
+        when(orderMapper.update(any(), any())).thenReturn(1);
 
         boolean changed = service.markPaid(1L, 2);
 
         assertTrue(changed);
-        assertEquals(1, order.getStatus());
-        verify(orderMapper).updateById(order);
+        // 原子条件更新：不再读-改-写整个 PO，避免并发回调双触发
+        verify(orderMapper).update(any(), any());
+        verify(orderMapper, never()).updateById(any(Order.class));
     }
 
     @Test
     void markPaidIdempotentWhenAlreadyPaid() {
+        // 条件更新未命中且重查为已支付：重复回调幂等返回 false
         Order order = new Order();
         order.setId(1L);
         order.setStatus(1);
         when(orderMapper.selectById(1L)).thenReturn(order);
+        when(orderMapper.update(any(), any())).thenReturn(0);
 
         boolean changed = service.markPaid(1L, 2);
 
@@ -259,9 +264,9 @@ class OrderServiceTest {
     // ==================== 超时关单：并发竞态与补偿 ====================
 
     @Test
-    void closeExpiredStillEnqueuesReleaseWhenConditionalUpdateMisses() {
-        // 条件更新未命中（如已被并发关单）：补偿消息仍登记，
-        // 由 order_msg.uk_biz_key 唯一索引挡住重复，保证补偿不丢
+    void closeExpiredSkipsCompensationWhenConditionalUpdateMisses() {
+        // 竞态防护：预检时待支付，但条件更新前状态被支付回调改变（rows=0），
+        // 此时严禁退券/释放名额，否则已支付订单会被错误补偿
         when(idempotencyGuard.tryConsume(any(), any(), any())).thenReturn(true);
         Order order = new Order();
         order.setId(1L);
@@ -273,10 +278,9 @@ class OrderServiceTest {
 
         service.closeExpired(1L);
 
-        verify(orderMsgService).enqueue(eq(1L), eq("quotaRelease"),
-                eq(MqTopics.TOPIC_COURSE_QUOTA), eq(MqTopics.Tags.QUOTA_RELEASE), any());
-        // 无优惠券：不登记退券消息、不恢复库存
-        verify(orderMsgService, never()).enqueue(anyLong(), eq("couponRefund"), any(), any(), any());
+        // 条件更新已尝试（原子判定），但未命中 → 不登记任何补偿消息、不恢复库存
+        verify(orderMapper).update(any(), any());
+        verify(orderMsgService, never()).enqueue(anyLong(), any(), any(), any(), any());
         verify(tradeCouponService, never()).restoreStock(anyLong(), anyLong(), anyInt());
     }
 }

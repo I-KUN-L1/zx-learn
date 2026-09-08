@@ -197,6 +197,10 @@ public class OrderService {
 
     /**
      * 支付回调：将待支付订单置为已支付。返回是否真正发生状态迁移（用于触发放事件）。
+     * <p>
+     * 使用条件更新（status=待支付 才允许迁移）保证并发回调下的原子性：
+     * 重复回调/并发回调仅有一个事务能真正迁移状态，其余幂等返回 false，
+     * 避免重复触发后续权益发放事件。
      */
     @Transactional(rollbackFor = Exception.class)
     public boolean markPaid(Long orderId, Integer payType) {
@@ -204,16 +208,23 @@ public class OrderService {
         if (order == null) {
             throw new BadRequestException("订单不存在");
         }
-        if (order.getStatus() != null && order.getStatus() == STATUS_PAID) {
+        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, orderId)
+                .eq(Order::getStatus, STATUS_UNPAID)
+                .set(Order::getStatus, STATUS_PAID)
+                .set(Order::getPayType, payType)
+                .set(Order::getPayTime, LocalDateTime.now()));
+        if (rows > 0) {
+            log.info("支付回调成功：orderId={}", orderId);
+            return true;
+        }
+        // 条件更新未命中：重查判定是"已支付的重复回调"（幂等返回）还是"状态不允许"
+        Order latest = orderMapper.selectById(orderId);
+        if (latest != null && Integer.valueOf(STATUS_PAID).equals(latest.getStatus())) {
             log.info("订单 {} 已支付，幂等返回", orderId);
             return false;
         }
-        order.setStatus(STATUS_PAID);
-        order.setPayType(payType);
-        order.setPayTime(LocalDateTime.now());
-        orderMapper.updateById(order);
-        log.info("支付回调成功：orderId={}", orderId);
-        return true;
+        throw new BizIllegalException("订单状态不允许支付");
     }
 
     /**
@@ -239,9 +250,13 @@ public class OrderService {
                 .eq(Order::getStatus, STATUS_UNPAID)
                 .set(Order::getStatus, STATUS_CLOSED)
                 .set(Order::getUpdateTime, LocalDateTime.now()));
-        if (rows > 0) {
-            log.info("订单超时关单：orderId={}", orderId);
+        // 竞态防护：预检与条件更新之间状态可能被支付回调改变（rows=0），
+        // 此时严禁退券/释放名额，否则已支付订单会被错误补偿
+        if (rows == 0) {
+            log.info("订单 {} 关单条件未命中（状态已变更），跳过补偿", orderId);
+            return;
         }
+        log.info("订单超时关单：orderId={}", orderId);
         // 使用了优惠券：退回库存（Redis 恢复 + 异步落库）
         if (order.getCouponId() != null && order.getCouponId() > 0) {
             CouponMsg refundMsg = new CouponMsg();

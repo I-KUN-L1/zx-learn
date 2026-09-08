@@ -20,12 +20,24 @@ spring:
       config:
         enabled: false
     gateway:
+      httpclient:
+        # 连接超时 2s：下游服务未监听/网络不可达时快速失败
+        connect-timeout: 2000
+        # 响应超时 30s：普通 JSON 接口的兜底阈值（SSE 流式路由单独放宽，见 aigc-service metadata）
+        response-timeout: 30s
+        pool:
+          type: elastic
       globalcors:
         cors-configurations:
           '[/**]':
-            allowed-origins: "*"
+            # 明确允许的前端来源（开发端口 5173/5174）；生产同源部署无需跨域
+            allowedOriginPatterns:
+              - http://localhost:5173
+              - http://localhost:5174
             allowed-methods: "*"
             allowed-headers: "*"
+            # 前端 axios withCredentials=true，需允许凭据
+            allow-credentials: true
       routes:
         # 秒杀领取限流路由（须位于 promotion-service 之前，仅拦截 POST 领取，轮询不受影响）
         - id: seckill-claim
@@ -51,6 +63,11 @@ spring:
           uri: http://localhost:8082
           predicates:
             - Path=/users/**,/students/**,/teachers/**,/staffs/**
+        # 搜索服务的课程检索端点（须置于 course-service 之前，避免被 /courses/** 通配遮蔽）
+        - id: search-course-route
+          uri: http://localhost:8091
+          predicates:
+            - Path=/courses/portal,/courses/name
         # 课程服务
         - id: course-service
           uri: http://localhost:8083
@@ -70,7 +87,7 @@ spring:
         - id: learning-service
           uri: http://localhost:8086
           predicates:
-            - Path=/lessons/**,/learning-records/**,/replies/**,/notes/**,/points/**,/boards/**,/sign-records/**,/admin/**
+            - Path=/lessons/**,/learning-records/**,/replies/**,/notes/**,/points/**,/boards/**,/sign-ins/**,/sign-records/**,/admin/**
         # 交易服务
         - id: trade-service
           uri: http://localhost:8087
@@ -101,11 +118,13 @@ spring:
           uri: http://localhost:8093
           predicates:
             - Path=/message-templates/**,/notice-tasks/**,/notice-templates/**,/sms/**,/sms-platforms/**,/inboxes/**
-        # AI 服务
+        # AI 服务（SSE 流式对话：响应为长连接，覆盖全局 30s 响应超时为 15 分钟）
         - id: aigc-service
           uri: http://localhost:8089
           predicates:
             - Path=/chat/**,/session/**,/audio/**,/embedding/**
+          metadata:
+            response-timeout: 900000
         # 数据看板服务
         - id: data-service
           uri: http://localhost:8094

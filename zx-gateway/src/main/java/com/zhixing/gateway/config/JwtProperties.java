@@ -25,7 +25,17 @@ public class JwtProperties {
             "/accounts/password/first-change",
             "/jwks",
             "/students/register",
+            "/teachers/register",
             "/v3/api-docs",
-            "/doc.html"
+            "/doc.html",
+            // 公共浏览接口：匿名可访问（自由浏览体验）；管理端写操作由后端 @RequireRole fail-closed 兜底
+            "/courses/page",
+            // 课程详情仅放行数字 id，避免放行 /courses/upShelf 等管理端点（AntPathMatcher 不校验 HTTP method）
+            "/courses/{id:\\d+}",
+            "/categorys/all",
+            "/coupons/page",
+            "/order-details/enrollNum",
+            // 图片公开访问（上传 POST /files 不在白名单，仍需员工/教师鉴权）
+            "/files/view/**"
     );
 }
