@@ -164,6 +164,7 @@ curl -N -X POST http://localhost:8080/chat \
 | zx-remark | 课程点评（扩展模块） | ✅ 可运行 | 8092 |
 | zx-message | 站内消息（扩展模块） | ✅ 可运行 | 8093 |
 | zx-data | 数据看板（扩展模块） | ✅ 可运行 | 8094 |
+| zx-web | 前端 Web 应用（Vue 3 + Vite + Element Plus，学员端 + 教师/管理端） | ✅ 完整 | 5173 |
 
 > ✅ 完整实现：含数据库持久化与完整业务校验；✅ 可运行：含 Application 入口与 REST 接口、可独立启动，业务纵深随 [ROADMAP.md](docs/ROADMAP.md) 持续补全（exam/media/pay/search/remark/message/data）。
 
@@ -174,7 +175,8 @@ curl -N -X POST http://localhost:8080/chat \
 ### 1. 环境要求
 
 - JDK 21+、Maven 3.8+
-- Docker（可选，用于一键启动 MySQL/Redis）或本机 MySQL 8.x、Redis
+- Node.js ≥ 18（推荐搭配 pnpm），用于启动前端 `zx-web`
+- Docker（用于一键启动 MySQL/Redis/PostgreSQL/RocketMQ）或本机 MySQL 8.x、Redis
 
 ### 2. 配置环境变量
 
@@ -184,14 +186,27 @@ curl -N -X POST http://localhost:8080/chat \
 cp .env.example .env
 ```
 
-> 各服务通过 `${VAR}` 读取环境变量；仓库内不包含任何默认密码或硬编码密钥。
+> 各服务通过 `${VAR}` 占位符读取环境变量；仓库内不包含任何默认密码或硬编码密钥。
+> `.env` 会被 **docker compose 与全部后端服务自动读取**（服务通过 `spring.config.import` 加载工作目录下 `./.env` 或 `../.env`），无需手动 export；前提是**从仓库根目录或其一级子目录启动服务**（`mvn -pl <module> spring-boot:run`、`java -jar target/*.jar`、IDEA 默认工作目录均满足）。
 
 ### 3. 初始化基础设施与数据库
 
 ```bash
-docker compose up -d          # 启动 MySQL + Redis（密码取自 .env）
-mysql -uroot -p < sql/init.sql   # 初始化数据库与表结构
+docker compose up -d   # 一键启动全部基础设施（密码取自 .env）
 ```
+
+compose 包含的基础设施：
+
+| 组件 | 用途 | 宿主机端口 |
+|---|---|---|
+| MySQL 8 | 16 个业务库（utf8mb4） | 3306（被占用时在 `.env` 配 `MYSQL_BIND_PORT=13306` 避让） |
+| Redis 7 | 缓存 / 会话记忆 / 秒杀库存（RDB+AOF 持久化） | 6379 |
+| PostgreSQL 16 + pgvector | RAG 向量知识库（zx-aigc） | 5432 |
+| RocketMQ 4.9 | 订单异步链路 / 券核销 / 超时关单 | 9876（控制台 18080） |
+
+> - MySQL 容器**首次启动**会自动执行挂载的 `sql/init.sql`，完成建库建表并写入示例数据（9 门课程、默认学员/教师账号等），无需手动导入。
+> - 仅跑最小链路（见第 5 步）时可按需启动：`docker compose up -d mysql redis`。
+> - 不用 Docker 时：本机安装 MySQL 8.x / Redis 后手动执行 `mysql -uroot -p -e "source sql/init.sql"`（PowerShell 不支持 `<` 重定向，勿用 `mysql < init.sql`）。
 
 ### 4. 编译
 
@@ -199,18 +214,42 @@ mysql -uroot -p < sql/init.sql   # 初始化数据库与表结构
 mvn clean install -DskipTests
 ```
 
-### 5. 启动核心链路
+### 5. 启动后端
+
+**① 启动服务**（在仓库根目录执行，每个 `mvn spring-boot:run` 占一个终端；最小链路按此顺序）：
 
 ```bash
 mvn -pl zx-user spring-boot:run      # 8082
 mvn -pl zx-course spring-boot:run    # 8083
 mvn -pl zx-auth spring-boot:run      # 8081
 mvn -pl zx-gateway spring-boot:run   # 8080
-mvn -pl zx-aigc spring-boot:run      # 8089（可选）
-mvn -pl zx-insight spring-boot:run   # 8095（可选）
+mvn -pl zx-aigc spring-boot:run      # 8089（可选，AI 助教）
+mvn -pl zx-insight spring-boot:run   # 8095（可选，学情报告）
 ```
 
-### 6. 验证
+> 服务启动时自动读取仓库根目录的 `.env`（`spring.config.import`），无需手动 export 环境变量。注意保持从根目录启动（或确保工作目录能解析到根目录的 `.env`），且第 4 步编译需先完成。
+
+**② 全量启动（可选）**：其余服务同样方式启动——zx-exam(8084) / zx-media(8085) / zx-learning(8086) / zx-trade(8087) / zx-promotion(8088) / zx-pay(8090) / zx-search(8091) / zx-remark(8092) / zx-message(8093) / zx-data(8094)。
+
+> - **IDEA 方式（推荐）**：直接打开根目录（Maven 自动聚合 16 个模块），在 Services 面板勾选全部 Spring Boot 应用一键启动，`.env` 同样自动生效。
+> - 本地模式 Nacos 默认关闭（`nacos.discovery.enabled: false`，走静态实例发现），无需安装 Nacos；切换 Nacos 见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+> - `zx-trade` 强制要求 `PAY_CALLBACK_SECRET`（未配置会启动失败），`.env.example` 中已有占位值。
+
+### 6. 启动前端
+
+```bash
+cd zx-web
+pnpm install   # 或 npm install（要求 Node.js ≥ 18，推荐 pnpm）
+pnpm dev       # 开发模式：http://localhost:5173
+```
+
+- 开发模式自动将 `/api` 请求代理到网关 `http://localhost:8080`（可用 `zx-web/.env.development` 中的 `VITE_PROXY_TARGET` 修改，适配非默认网关端口）
+- 5173 端口被占用时 Vite 会自动顺延到 5174，以控制台输出的 `Local: http://localhost:PORT` 为准
+- **Mock 演示模式**：`pnpm dev:mock`——无需任何后端，内置演示数据与模拟 SSE 流式输出，适合快速预览页面
+- 生产构建：`pnpm build`（产物在 `zx-web/dist`），本地预览构建结果 `pnpm preview`
+- 更多前端细节见 [zx-web/README.md](zx-web/README.md)
+
+### 7. 验证
 
 ```bash
 # ① 获取首个管理员账号与初始密码
@@ -235,6 +274,11 @@ curl http://localhost:8080/courses/page -H "Authorization: Bearer <accessToken>"
 curl -X POST http://localhost:8080/chat/text \
   -H "Content-Type: application/json" \
   -d '{"sessionId":"s1","question":"帮我推荐一门 Java 课程"}'
+
+# ⑥ 浏览器验证前端：访问 http://localhost:5173 并登录
+#    默认学员：13900000001 / 123456
+#    默认教师：13900000002 / 123456（账号来自 sql/init.sql 种子数据）
+#    管理员：见步骤 ①，手机号在 .bootstrap-credentials 中
 ```
 
 > 在线接口文档：启动对应服务后访问 `http://localhost:{port}/doc.html`（Knife4j）。
@@ -328,6 +372,9 @@ mvn test
 | **端口冲突如何修改？** | 启动参数覆盖：`java -jar zx-course.jar --server.port=18083`；或改该服务 `application.yml` 的 `server.port`。注意：本地直连模式下其他服务的静态实例地址需同步更新 |
 | **本机已装 MySQL，`docker compose up` 报 3306 被占？** | 在 `.env` 中取消注释并修改 `MYSQL_BIND_PORT=13306`（compose 将容器映射到宿主机空闲端口），应用侧通过 `MYSQL_PORT` 指定实际端口即可 |
 | **MySQL 版本有要求吗？** | **MySQL 8.x**（utf8mb4 字符集）。不保证兼容 5.7 —— 连接驱动、SQL 方言均按 8.x 设计，低版本不排查兼容问题 |
+| **启动报 `Could not resolve placeholder 'MYSQL_PASSWORD'`？** | 服务没找到 `.env` 文件。确认仓库根目录存在 `.env`（第 2 步），并从根目录（或一级子目录内）启动服务；`spring.config.import` 按 `./.env` → `../.env` 顺序查找 |
+| **前端打开后接口报错 / 一直提示登录？** | Vite 将 `/api` 代理到 `http://localhost:8080` 网关——确认最小链路 4 个服务（gateway/auth/user/course）均已启动；网关端口非 8080 时改 `zx-web/.env.development` 的 `VITE_PROXY_TARGET` 后重启 Vite |
+| **前端端口 / 代理如何修改？** | 端口被占时 Vite 自动顺延（5174），以控制台 `Local:` 输出为准；代理目标改 `zx-web/.env.development` 中 `VITE_PROXY_TARGET`；只想看页面不启后端用 `pnpm dev:mock` |
 | **最小启动链路是什么？** | 只起 4 个服务即可跑通「登录 → 浏览课程」：`zx-user(8082) → zx-course(8083) → zx-auth(8081) → zx-gateway(8080)`，基础设施只需 MySQL + Redis。AI 助教加 `zx-aigc(8089)`，学情报告加 `zx-insight(8095)`，其余服务按需启动 |
 | **JDK 17 能运行吗？** | 不能。项目统一 **Java 21**（`maven.compiler.release=21`，且启用虚拟线程），CI 同样以 JDK 21 构建验证；请安装 JDK 21+ |
 

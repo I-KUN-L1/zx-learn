@@ -11,6 +11,10 @@ management:
       show-details: always
 
 spring:
+  config:
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
   application:
     name: insight-service
   datasource:
