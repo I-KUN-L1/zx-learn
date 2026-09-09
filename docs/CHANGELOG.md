@@ -55,9 +55,11 @@
 - E2E（浏览器）：登录流程 8/8——错误密码仅 1 次请求无死循环、正确登录跳转、业务页免弹窗。
 - 结构：删除根目录 `jmeter.log`（4.5MB 运行残留）。
 
+> **影响面**：zx-web/src/api/request.ts（重放防护+重试）· zx-gateway application.yml（超时/CORS，需重启生效）· zx-trade OrderService（关单/支付回调，需重启生效）· zx-common CommonExceptionAdvice（服务重启生效）
 
 ---
 
+## v1.2.4（2026-09-04）P1 批量修复：安全基线 / 文档口径 / 可移植性（发布审查 P1×9 清零）
 
 ### 问题修复
 
@@ -79,9 +81,11 @@
 - P1-7：zx-course（仅配 consumer-group）启动日志**无** "RocketMQ 生产者启动失败" ERROR（修复前必现）。
 - P1-1：zx-trade 不带 `PAY_CALLBACK_SECRET` 启动 → fail-fast 失败并输出明确提示；带上后正常启动。
 
+> **影响面**：zx-common（MQ 条件装配）· zx-trade（回调密钥 fail-fast）· Dockerfile · docker-compose.yml · .env.example · README.md（指标回填 / 预览重写 / 口径统一 / SSE 端点）
 
 ---
 
+## v1.2.3（2026-09-04）mq-console 端口冲突修复（发布审查 P0-3）
 
 ### 问题修复
 
@@ -94,9 +98,11 @@
 - `docker compose config` 解析为 `published:"18080" / target:8080`；容器 Recreated 后 `0.0.0.0:18080->8080/tcp`，`http://localhost:18080/` HTTP 200。
 - 宿主机 8080 释放后实测 `java -jar zx-gateway.jar` → `Started GatewayApplication in 5.531 seconds`（修复前必失败），无 token 访问受保护接口 401（鉴权正常）。
 
+> **影响面**：docker-compose（console 映射）· docs/TRADE-CONSISTENCY.md（端口笔误）· **3 项 P0 全部清零**
 
 ---
 
+## v1.2.2（2026-09-04）网关白名单与 void Feign 吞错修复（发布审查 P0-2）
 
 ### 问题修复
 
@@ -110,9 +116,11 @@
 - 单元测试：`RDecoderVoidDecodeTest`（2 例：void 方法收到 `R{400}` 必抛 `DecodeException` 且 cause/message 保留；`R{200}` 正常返回），zx-common 17 例 + zx-auth 12 例全绿。
 - 运行时 E2E（网关 18080 → zx-auth → zx-user 全链路）：① 无 token + 错误旧密码 → 400"原密码错误"、凭据文件保留（修复前 200 假成功+误删）；② 无 token + 正确旧密码 → 200、凭据文件自动删除；③ 旧密码登录 401；④ 新密码登录 200 且 token 含真实雪花身份（sub/userId/roleId）；⑤ 保护接口无 token 仍 401（白名单未过度放行）。
 
+> **影响面**：zx-gateway（白名单）· zx-common（decodeVoid 自动装配，受影响 void Feign 方法：`changeBootstrapPassword`/`deleteCartByIds`/`sendSms`）· zx-auth（改密解包 fail-closed）
 
 ---
 
+## v1.2.1（2026-09-04）认证链路修复（发布审查 P0-1）
 
 ### 问题修复
 
@@ -125,6 +133,7 @@
 - 单元测试：`RDecoderTest`（11 例：信封解包 / 无 data 字段的 401 错误体 / 裸返回直解 / 泛型 List / R 目标不解包 / String 目标）+ `AccountServiceTest`（5 例：错误凭据 401 / 远程失败 401 / **空对象 401** / 禁用账号 401 / 正常登录签发带身份 token），zx-common + zx-auth 共 27 例全绿。
 - 运行时 E2E（网关 → zx-auth → zx-user 全链路）：错误密码 401 无 token；不存在手机号 401；正确凭据 200 且 token 含 `sub/userId/roleId` 真实身份（雪花 ID）；携带该 token 访问 `/courses/page` 与 `/chat/text` 均 200。
 
+> **影响面**：zx-common（RDecoder + 自动装配）· zx-auth（login 防御）· 全部依赖 zx-api Feign 客户端的服务（解码行为由"静默错数据"变为"显式异常"）
 
 ---
 

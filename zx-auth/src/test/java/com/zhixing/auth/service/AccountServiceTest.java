@@ -24,7 +24,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
- * 登录服务单元测试：重点覆盖 GO-LIVE-CHECKLIST P0-1 修复——
+ * 登录服务单元测试：重点覆盖 P0-1 修复——
  * 错误凭据、远程空身份对象均必须 401，禁止签发无身份 token
  */
 @ExtendWith(MockitoExtension.class)

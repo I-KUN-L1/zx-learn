@@ -25,7 +25,7 @@ import java.nio.charset.StandardCharsets;
  * <p>背景：服务端 {@code CommonExceptionAdvice} 对业务异常返回 HTTP 200 + R 包装体
  * （如 {@code {"code":401,"msg":"..."}}），若 Feign 按声明类型直接反序列化，
  * 会得到"全字段为 null 的空对象"而非异常，导致校验形同虚设
- * （典型事故：登录接口任意密码均返回成功 token，见 docs/GO-LIVE-CHECKLIST.md P0-1）。
+ * （典型事故：登录接口任意密码均返回成功 token）。
  *
  * <p>解码规则：
  * <ul>
