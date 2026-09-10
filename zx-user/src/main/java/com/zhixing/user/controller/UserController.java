@@ -12,6 +12,7 @@ import com.zhixing.common.domain.PageDTO;
 import com.zhixing.common.domain.PageQuery;
 import com.zhixing.common.domain.R;
 import com.zhixing.common.utils.BeanUtils;
+import com.zhixing.common.utils.InternalOnlyGuard;
 import com.zhixing.user.domain.dto.UserFormDTO;
 import com.zhixing.user.domain.vo.UserVO;
 import com.zhixing.user.mapper.UserMapper;
@@ -34,49 +35,56 @@ public class UserController {
     private final UserService userService;
     private final UserMapper userMapper;
 
-    // ============ 内部接口（Feign 调用，不包装） ============
+    // ============ 内部接口（Feign 调用，不包装；外部经网关访问一律 403） ============
 
     @PostMapping("/detail/{isStaff}")
     @NoWrapper
     public UserDTO queryUserDetail(@RequestBody LoginFormDTO loginFormDTO, @PathVariable("isStaff") boolean isStaff) {
+        InternalOnlyGuard.checkInternal();
         return userService.queryUserDetail(loginFormDTO, isStaff);
     }
 
-    // ============ 首个管理员引导（Feign 内部调用，不包装） ============
+    // ============ 首个管理员引导（Feign 内部调用，不包装；外部经网关访问一律 403） ============
 
     @GetMapping("/bootstrap/admin-exists")
     @NoWrapper
     public Boolean adminExists() {
+        InternalOnlyGuard.checkInternal();
         return userService.adminExists();
     }
 
     @PostMapping("/bootstrap/admin")
     @NoWrapper
     public UserDTO createBootstrapAdmin(@RequestBody BootstrapAdminDTO dto) {
+        InternalOnlyGuard.checkInternal();
         return userService.createBootstrapAdmin(dto.getUsername(), dto.getCellPhone(), dto.getPassword());
     }
 
     @PutMapping("/bootstrap/password")
     @NoWrapper
     public void changeBootstrapPassword(@RequestBody PasswordChangeDTO dto) {
+        InternalOnlyGuard.checkInternal();
         userService.changeBootstrapPassword(dto.getCellPhone(), dto.getOldPassword(), dto.getNewPassword());
     }
 
     @GetMapping("/list")
     @NoWrapper
     public List<UserDTO> queryUserByIds(@RequestParam("ids") List<Long> ids) {
+        InternalOnlyGuard.checkInternal();
         return userService.queryUserByIds(ids);
     }
 
     @GetMapping("/{id}/type")
     @NoWrapper
     public Integer queryUserType(@PathVariable("id") Long id) {
+        InternalOnlyGuard.checkInternal();
         return userService.queryUserType(id);
     }
 
     @GetMapping("/ids")
     @NoWrapper
     public Map<String, Long> exchangeUserId(@RequestParam("phone") String phone) {
+        InternalOnlyGuard.checkInternal();
         return userService.exchangeUserId(phone);
     }
 
@@ -137,5 +145,16 @@ public class UserController {
     public R<PageDTO<UserVO>> page(PageQuery query, @RequestParam(required = false) Integer type) {
         Page<User> page = userMapper.selectPage(query.toMpPage("id", false), null);
         return R.ok(PageDTO.of(page, u -> BeanUtils.copyBean(u, UserVO.class)));
+    }
+
+    /**
+     * 用户总量统计（内部 Feign 接口，供管理端看板消费，不包装）。
+     * 仅限服务间调用：外部用户（含管理员）经网关访问一律 403。
+     */
+    @GetMapping("/stats/total")
+    @NoWrapper
+    public Long totalUsers() {
+        InternalOnlyGuard.checkInternal();
+        return userMapper.selectCount(null);
     }
 }

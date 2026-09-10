@@ -2,6 +2,7 @@ package com.zhixing.pay.controller;
 
 import com.zhixing.common.domain.R;
 import com.zhixing.common.exceptions.BadRequestException;
+import com.zhixing.common.utils.InternalOnlyGuard;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +29,7 @@ public class PayOrderController {
 
     @PostMapping("/pay-orders")
     public R<Map<String, Object>> apply(@RequestBody Map<String, Object> request) {
+        InternalOnlyGuard.checkInternal();
         if (request == null || request.get("bizOrderNo") == null) {
             throw new BadRequestException("支付单参数不完整");
         }

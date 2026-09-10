@@ -40,10 +40,19 @@ public class SessionController {
         return R.ok(sessionService.detail(sessionId));
     }
 
+    /**
+     * 删除会话记录。
+     * <p>
+     * 兼容两种调用方式以杜绝 Content-Type 报错：
+     * ① 规范 JSON body {@code {"sessionId":"xx"}}；② 历史遗留的 query 参数 {@code ?sessionId=xx}。
+     * </p>
+     */
     @DeleteMapping("/history")
-    public R<Void> delete(@RequestBody Map<String, String> body,
+    public R<Void> delete(@RequestBody(required = false) Map<String, String> body,
+                          @RequestParam(required = false) String sessionId,
                           @RequestHeader(value = "user-info", required = false) Long userId) {
-        sessionService.delete(body.get("sessionId"), userId == null ? 0L : userId);
+        String id = sessionId != null ? sessionId : (body != null ? body.get("sessionId") : null);
+        sessionService.delete(id, userId == null ? 0L : userId);
         return R.ok();
     }
 

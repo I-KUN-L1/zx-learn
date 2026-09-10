@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.zhixing.api.client.course.CourseClient;
 import com.zhixing.api.dto.course.CourseSimpleInfoDTO;
 import com.zhixing.api.dto.trade.QuotaMsg;
+import com.zhixing.api.dto.trade.TradeStatsDTO;
 import com.zhixing.common.exceptions.BadRequestException;
 import com.zhixing.common.exceptions.BizIllegalException;
 import com.zhixing.common.mq.MqTopics;
@@ -24,8 +25,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 订单服务。
@@ -348,6 +353,52 @@ public class OrderService {
                 .eq(Order::getCourseId, courseId)
                 .eq(Order::getStatus, STATUS_PAID));
         return count > 0;
+    }
+
+    /**
+     * 交易统计聚合（内部 Feign 接口，供管理端看板消费）：
+     * 已支付订单量 / 销售额、近 7 日趋势（按支付日聚合，缺数日期补 0）、热门课程 TOP5。
+     */
+    public TradeStatsDTO dashboardStats() {
+        // 仅统计确已支付的订单（status=PAID 且支付时间非空，防御异常数据）
+        List<Order> paid = orderMapper.selectList(new LambdaQueryWrapper<Order>()
+                        .eq(Order::getStatus, STATUS_PAID)).stream()
+                .filter(o -> o.getPayTime() != null)
+                .toList();
+        long totalSales = paid.stream()
+                .mapToLong(o -> o.getTotalFee() == null ? 0L : o.getTotalFee())
+                .sum();
+        List<TradeStatsDTO.CourseCount> hot = paid.stream()
+                .filter(o -> o.getCourseId() != null)
+                .collect(Collectors.groupingBy(Order::getCourseId, Collectors.counting()))
+                .entrySet().stream()
+                .sorted(Map.Entry.<Long, Long>comparingByValue().reversed())
+                .limit(5)
+                .map(e -> new TradeStatsDTO.CourseCount(e.getKey(), e.getValue()))
+                .toList();
+        return new TradeStatsDTO((long) paid.size(), totalSales, buildDailyTrend(paid), hot);
+    }
+
+    /** 近 7 日订单趋势：按支付日聚合订单量与销售额，缺失日期补 0 */
+    private List<TradeStatsDTO.TrendPoint> buildDailyTrend(List<Order> paid) {
+        LocalDate today = LocalDate.now();
+        Map<String, long[]> byDate = new LinkedHashMap<>();
+        for (int i = 6; i >= 0; i--) {
+            byDate.put(today.minusDays(i).toString(), new long[]{0, 0});
+        }
+        for (Order o : paid) {
+            if (o.getPayTime() == null) {
+                continue;
+            }
+            long[] slot = byDate.get(o.getPayTime().toLocalDate().toString());
+            if (slot != null) {
+                slot[0]++;
+                slot[1] += o.getTotalFee() == null ? 0L : o.getTotalFee();
+            }
+        }
+        return byDate.entrySet().stream()
+                .map(e -> new TradeStatsDTO.TrendPoint(e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .toList();
     }
 
 }

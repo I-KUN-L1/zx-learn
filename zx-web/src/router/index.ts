@@ -109,11 +109,11 @@ const routes: RouteRecordRaw[] = [
     ],
   },
 
-  /* ---------- 教师/管理端 ---------- */
+  /* ---------- 管理端 ---------- */
   {
     path: '/admin',
     component: () => import('@/components/layout/AdminLayout.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, roles: ['admin'] },
     children: [
       {
         path: 'dashboard',

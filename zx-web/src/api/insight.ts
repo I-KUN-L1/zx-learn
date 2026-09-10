@@ -16,9 +16,16 @@ export function learningPath() {
   return request.get<LearningPathVO>('/insight/learning-path')
 }
 
-/** 最新学情报告文本 */
+/** 最新学情报告文本（对齐后端 ReportVO；无 content，正文用 summary） */
 export function latestReport() {
-  return request.get<{ id: number; userId: number; content: string; createTime: string }>('/insight/reports/latest')
+  return request.get<{
+    id: number
+    userId: number
+    reportDate?: string
+    summary?: string
+    content?: string
+    createTime?: string
+  }>('/insight/reports/latest')
 }
 
 /** 管理端看板数据 */

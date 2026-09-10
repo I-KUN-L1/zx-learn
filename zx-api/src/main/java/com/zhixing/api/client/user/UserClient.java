@@ -46,4 +46,10 @@ public interface UserClient {
 
     @GetMapping("/users/me")
     UserDTO queryMe();
+
+    /**
+     * 用户总量统计（内部 Feign 接口，供管理端看板消费）
+     */
+    @GetMapping("/users/stats/total")
+    Long queryTotalUsers();
 }

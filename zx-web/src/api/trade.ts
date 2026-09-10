@@ -26,9 +26,9 @@ export function clearCart() {
 
 /* ---------- 订单 ---------- */
 
-/** 创建订单（后端雪花单号 + 15 分钟超时关单） */
+/** 创建订单（后端雪花单号 + 15 分钟超时关单，返回订单 id） */
 export function placeOrder(data: PlaceOrderDTO) {
-  return request.post<OrderVO>('/orders/placeOrder', data)
+  return request.post<number>('/orders/placeOrder', data)
 }
 
 export interface OrderPageParams extends PageQuery {

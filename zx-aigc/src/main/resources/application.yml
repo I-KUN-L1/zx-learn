@@ -52,9 +52,14 @@ spring:
 
 zx:
   llm:
-    base-url: ${ZX_LLM_BASE_URL:https://api.openai.com}
+    # 智谱清言官方 OpenAI 兼容端点：POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+    base-url: ${ZX_LLM_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+    chat-path: ${ZX_LLM_CHAT_PATH:chat/completions}
     api-key: ${ZX_LLM_API_KEY:}
-    model: ${ZX_LLM_MODEL:gpt-3.5-turbo}
+    model: ${ZX_LLM_MODEL:glm-4.5-air}
+    temperature: ${ZX_LLM_TEMPERATURE:0.8}
+    top-p: ${ZX_LLM_TOP_P:0.95}
+    max-tokens: ${ZX_LLM_MAX_TOKENS:1024}
     enabled: ${ZX_LLM_ENABLED:false}
     embedding-model: ${ZX_LLM_EMBEDDING_MODEL:text-embedding-3-small}
     embedding-dimension: ${ZX_LLM_EMBEDDING_DIMENSION:1536}

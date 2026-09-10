@@ -47,17 +47,22 @@ async function init() {
   }
 }
 
-/** 提交订单（后端：雪花单号 + 本地消息表 + 15 分钟超时关单） */
+/** 提交订单（后端：每门课程一张订单 + 雪花单号 + 本地消息表 + 15 分钟超时关单） */
 async function onSubmit() {
   if (!courses.value.length) return
   submitting.value = true
   try {
-    const order = await placeOrder({
-      courseIds: courseIds.value,
-      couponId: selectedCouponId.value,
-    })
-    ElMessage.success(`下单成功！订单 ${order.orderNo} 将在 15 分钟后超时自动关闭`)
-    await router.replace(`/trade/orders?orderNo=${order.orderNo}&pending=1`)
+    // 选中的用户券：couponId 传“券模板 id”，userCouponId 传“用户券行 id”，与后端下单/核销契约对齐
+    const uc = coupons.value.find((c) => c.id === selectedCouponId.value)
+    for (const course of courses.value) {
+      await placeOrder({
+        courseId: course.id,
+        couponId: uc?.couponId,
+        userCouponId: uc?.id,
+      })
+    }
+    ElMessage.success(`下单成功！订单将在 15 分钟后超时自动关闭`)
+    await router.replace(`/trade/orders?pending=1`)
   } catch {
     /* ignore */
   } finally {

@@ -1,5 +1,7 @@
 package com.zhixing.remark.controller;
 
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import com.zhixing.common.exceptions.BadRequestException;
 import com.zhixing.common.utils.UserContext;
@@ -23,6 +25,7 @@ public class LikedRecordController {
     private final Map<Long, Set<Long>> likeStore = new ConcurrentHashMap<>();
 
     @PostMapping
+    @RequireRole(UserRole.STUDENT)
     public R<Boolean> like(@RequestBody Map<String, Long> body) {
         Long bizId = body.get("bizId");
         if (bizId == null) {
@@ -43,6 +46,7 @@ public class LikedRecordController {
     }
 
     @GetMapping("/list")
+    @RequireRole({UserRole.STUDENT, UserRole.TEACHER})
     public R<Map<Long, Boolean>> status(@RequestParam("bizIds") List<Long> bizIds) {
         Long userId = UserContext.getUserId();
         Map<Long, Boolean> result = bizIds.stream().collect(Collectors.toMap(

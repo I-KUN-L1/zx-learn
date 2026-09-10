@@ -39,6 +39,8 @@ export interface LoginResultVO {
   refreshToken: string
   userId: number
   username: string
+  /** 角色（admin/teacher/student，Mock 或后端显式返回时使用，否则从前端解析 JWT） */
+  role?: 'admin' | 'teacher' | 'student'
   /** 首次登录标记（后端扩展字段，Mock 模式下使用） */
   firstLogin?: boolean
 }
@@ -267,10 +269,14 @@ export interface OrderVO {
   details: OrderDetailVO[]
 }
 
-/** 下单请求 */
+/** 下单请求（对齐后端 OrderFormDTO：单课程 + 可选优惠券） */
 export interface PlaceOrderDTO {
-  courseIds: number[]
+  /** 课程 id（后端逐门课程生成一张订单） */
+  courseId: number
+  /** 优惠券模板 id */
   couponId?: number
+  /** 用户券 id（用户领取到的具体一张券） */
+  userCouponId?: number
 }
 
 /** 考题 QuestionVO */

@@ -84,8 +84,14 @@ public class SeckillService {
      * <p>所有业务结果（含拒绝）均以 200 + 状态字段返回，保证接口零事务、低延迟。</p>
      */
     public Map<String, Object> claim(Long userId, Long couponId) {
+        // 惰性预热：若活动余量 key 尚未写入（首次抢购/服务重启后 Redis 清空），先按券余量 SETNX 补齐，
+        // 避免未走管理端 warmup 导致秒杀一直 NOT_READY。
+        String stockKey = String.format(STOCK_KEY, couponId);
+        if (Boolean.FALSE.equals(redisTemplate.hasKey(stockKey))) {
+            warmup(couponId);
+        }
         Long r = redisTemplate.execute(claimScript,
-                List.of(String.format(STOCK_KEY, couponId), String.format(USERS_KEY, couponId)),
+                List.of(stockKey, String.format(USERS_KEY, couponId)),
                 String.valueOf(userId), String.valueOf(claimLimit));
         if (r != null && r == 1L) {
             boolean ok = sendClaimMsg(couponId, userId);

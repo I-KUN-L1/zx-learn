@@ -1,5 +1,6 @@
 package com.zhixing.api.client.learning;
 
+import com.zhixing.api.dto.learning.DailyActiveDTO;
 import com.zhixing.api.dto.learning.LearningRecordDTO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,4 +25,10 @@ public interface LearningClient {
      */
     @GetMapping("/learning-records/users/{userId}/sum")
     Long sumDuration(@PathVariable("userId") Long userId);
+
+    /**
+     * 近 7 日日活统计（按学习记录去重用户数）
+     */
+    @GetMapping("/learning-records/stats/active")
+    List<DailyActiveDTO> queryDailyActive();
 }

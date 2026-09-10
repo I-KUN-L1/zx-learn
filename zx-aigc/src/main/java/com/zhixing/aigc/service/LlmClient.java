@@ -39,12 +39,13 @@ public class LlmClient {
         if (!properties.isEnabled() || properties.getApiKey().isBlank()) {
             return Mono.just(mockReply(messages));
         }
-        Map<String, Object> body = Map.of(
-                "model", properties.getModel(),
-                "messages", messages,
-                "stream", false);
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", properties.getModel());
+        body.put("messages", messages);
+        body.put("stream", false);
+        applyParams(body);
         return webClient.post()
-                .uri("/v1/chat/completions")
+                .uri(chatUri())
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(Map.class)
@@ -60,17 +61,37 @@ public class LlmClient {
             String reply = mockReply(messages);
             return Flux.fromArray(reply.split("(?<=\\G.{8})"));
         }
-        Map<String, Object> body = Map.of(
-                "model", properties.getModel(),
-                "messages", messages,
-                "stream", true);
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", properties.getModel());
+        body.put("messages", messages);
+        body.put("stream", true);
+        applyParams(body);
         return webClient.post()
-                .uri("/v1/chat/completions")
+                .uri(chatUri())
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(String.class)
                 .filter(line -> line.startsWith("data:") && !line.contains("[DONE]"))
                 .map(line -> parseDelta(line));
+    }
+
+    /** 拼接补全接口地址：跳过头尾多余的斜杠，避免产生形如 v4//chat 的双斜杠路径 */
+    private String chatUri() {
+        String path = properties.getChatPath() == null ? "chat/completions" : properties.getChatPath();
+        return "/" + path.replaceAll("^/+|/+$", "");
+    }
+
+    /** 填充模型生成参数（temperature / top_p / max_tokens），供 ChatGLM 等厂商生效 */
+    private void applyParams(Map<String, Object> body) {
+        if (properties.getTemperature() != null) {
+            body.put("temperature", properties.getTemperature());
+        }
+        if (properties.getTopP() != null) {
+            body.put("top_p", properties.getTopP());
+        }
+        if (properties.getMaxTokens() != null) {
+            body.put("max_tokens", properties.getMaxTokens());
+        }
     }
 
     private String extractContent(Map<?, ?> resp) {
@@ -139,9 +160,10 @@ public class LlmClient {
             body.put("tools", tools);
             body.put("tool_choice", "auto");
             body.put("stream", false);
+            applyParams(body);
 
             Map<?, ?> resp = webClient.post()
-                    .uri("/v1/chat/completions")
+                    .uri(chatUri())
                     .bodyValue(body)
                     .retrieve()
                     .bodyToMono(Map.class)

@@ -1,5 +1,7 @@
 package com.zhixing.search.controller;
 
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -41,6 +43,7 @@ public class CourseSearchController {
     }
 
     @PostMapping("/interests")
+    @RequireRole(UserRole.STUDENT)
     public R<Void> saveInterest(@RequestBody Map<String, Object> interest) {
         log.info("保存用户兴趣：{}", interest);
         return R.ok();

@@ -266,8 +266,12 @@ export const request = {
   put<T>(url: string, data?: unknown): Promise<T> {
     return service.put(url, data) as Promise<T>
   },
-  delete<T>(url: string, params?: Record<string, unknown>): Promise<T> {
-    return service.delete(url, { params }) as Promise<T>
+  /**
+   * DELETE 请求：与后端 @RequestBody 契约对齐，第二个参数作为 JSON body 发送
+   * （避免 DELETE 无 body 时被后端判定为 application/octet-stream 导致解析失败）。
+   */
+  delete<T>(url: string, data?: Record<string, unknown>): Promise<T> {
+    return service.delete(url, data ? { data } : undefined) as Promise<T>
   },
 }
 

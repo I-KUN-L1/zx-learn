@@ -6,6 +6,7 @@ import com.zhixing.common.exceptions.BadRequestException;
 import com.zhixing.common.exceptions.BizIllegalException;
 import com.zhixing.promotion.domain.po.Coupon;
 import com.zhixing.promotion.domain.po.UserCoupon;
+import com.zhixing.promotion.domain.vo.UserCouponVO;
 import com.zhixing.promotion.mapper.CouponMapper;
 import com.zhixing.promotion.mapper.UserCouponMapper;
 import lombok.RequiredArgsConstructor;
@@ -157,6 +158,26 @@ public class UserCouponService {
                 .eq(UserCoupon::getUserId, userId)
                 .eq(status != null, UserCoupon::getStatus, status)
                 .orderByDesc(UserCoupon::getCreateTime));
+    }
+
+    /** 用户优惠券 VO 列表（对齐前端 UserCouponVO 契约：discountValue 字段 + 状态语义 0/1/2 → 1/2/3） */
+    public List<UserCouponVO> listVosByUser(Long userId, Integer status) {
+        return listByUser(userId, status).stream().map(this::toVO).toList();
+    }
+
+    /** 用户优惠券 PO → VO */
+    public UserCouponVO toVO(UserCoupon uc) {
+        UserCouponVO vo = new UserCouponVO();
+        vo.setId(uc.getId());
+        vo.setUserId(uc.getUserId());
+        vo.setCouponId(uc.getCouponId());
+        vo.setCouponName(uc.getCouponName());
+        vo.setDiscountValue(uc.getDiscountAmount());
+        vo.setThresholdAmount(uc.getThresholdAmount());
+        vo.setCreateTime(uc.getCreateTime());
+        // 状态语义对齐：存储 0未使用/1已使用/2已过期 → 前端 1未使用/2已使用/3已过期
+        vo.setStatus(uc.getStatus() == null ? null : uc.getStatus() + 1);
+        return vo;
     }
 
     /**

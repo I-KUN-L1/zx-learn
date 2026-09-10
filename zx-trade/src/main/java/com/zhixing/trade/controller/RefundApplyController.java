@@ -23,6 +23,7 @@ public class RefundApplyController {
     private final RefundService refundService;
 
     @PostMapping
+    @RequireRole(UserRole.STUDENT)
     public R<Long> apply(@RequestBody Map<String, Object> apply) {
         return R.ok(refundService.apply(apply));
     }

@@ -10,6 +10,7 @@ import com.zhixing.common.utils.BeanUtils;
 import com.zhixing.common.utils.StringUtils;
 import com.zhixing.promotion.domain.dto.CouponFormDTO;
 import com.zhixing.promotion.domain.po.Coupon;
+import com.zhixing.promotion.domain.vo.CouponVO;
 import com.zhixing.promotion.mapper.CouponMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -83,12 +84,31 @@ public class CouponService {
         return refreshState(id);
     }
 
-    public PageDTO<Coupon> page(PageQuery query, String name, Integer status) {
+    public PageDTO<CouponVO> page(PageQuery query, String name, Integer status, Integer type) {
         Page<Coupon> page = couponMapper.selectPage(query.toMpPage("create_time", false),
                 new LambdaQueryWrapper<Coupon>()
                         .like(StringUtils.isNotBlank(name), Coupon::getName, name)
-                        .eq(status != null, Coupon::getStatus, status));
-        return PageDTO.of(page);
+                        .eq(status != null, Coupon::getStatus, status)
+                        .eq(type != null, Coupon::getType, type));
+        return PageDTO.of(page, this::toVO);
+    }
+
+    /** 优惠券 PO → VO（补全前端契约字段：discountValue / remainNum / issueBeginTime / issueEndTime） */
+    public CouponVO toVO(Coupon c) {
+        CouponVO vo = new CouponVO();
+        vo.setId(c.getId());
+        vo.setName(c.getName());
+        vo.setType(c.getType());
+        vo.setDiscountValue(c.getDiscountAmount());
+        vo.setThresholdAmount(c.getThresholdAmount());
+        vo.setTotalNum(c.getTotalNum());
+        vo.setStatus(c.getStatus());
+        // 剩余数量 = 发行总量 - 已发放数量
+        int issued = c.getIssuedNum() == null ? 0 : c.getIssuedNum();
+        vo.setRemainNum((c.getTotalNum() == null ? 0 : c.getTotalNum()) - issued);
+        vo.setIssueBeginTime(c.getValidBeginTime());
+        vo.setIssueEndTime(c.getValidEndTime());
+        return vo;
     }
 
     public void delete(Long id) {

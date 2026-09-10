@@ -49,17 +49,34 @@ async function onClaim() {
   claiming.value = true
   try {
     if (isSeckill.value) {
-      // 秒杀：先抢后轮询结果（对齐后端异步秒杀链路）
+      // 秒杀：Lua 原子预扣 → MQ 异步落库 → 前端轮询结果（对齐后端真实链路）
       await seckillClaim(props.coupon.id)
-      const res = await seckillResult(props.coupon.id)
-      if (res.success) {
-        ElMessageBox.alert(`恭喜你成功抢到「${props.coupon.name}」！`, '秒杀成功', {
-          confirmButtonText: '太好了',
-          type: 'success',
-        })
-        emit('claimed')
-      } else {
-        ElMessage.warning('手慢了，未抢到本次秒杀')
+      // 轮询策略：轮询 6 次，间隔 2 秒，共 12 秒；超时则告知用户稍后查看
+      for (let i = 0; i < 6; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        const res = await seckillResult(props.coupon.id)
+        // 兼容真实后端(status)和 Mock 旧格式(success)
+        if (res.success || res.status === 'SUCCESS') {
+          ElMessageBox.alert(`恭喜你成功抢到「${props.coupon.name}」！`, '秒杀成功', {
+            confirmButtonText: '太好了',
+            type: 'success',
+          })
+          emit('claimed')
+          break
+        } else if (res.status === 'QUEUING') {
+          // 还在排队，继续轮询
+          continue
+        } else {
+          // SOLD_OUT / REPEAT / FAILED 等失败状态，直接提示
+          const msg: Record<string, string> = {
+            SOLD_OUT: '手慢了，库存已抢光',
+            REPEAT: '你已经领取过该秒杀券了',
+            FAILED: '领取失败，请稍后再试',
+            NOT_READY: '秒杀活动尚未开始',
+          }
+          ElMessage.warning(msg[res.status as string] || '未抢到本次秒杀')
+          break
+        }
       }
     } else {
       await claimCoupon(props.coupon.id)

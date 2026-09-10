@@ -2,6 +2,7 @@ package com.zhixing.trade.service;
 
 import com.zhixing.api.client.course.CourseClient;
 import com.zhixing.api.dto.course.CourseSimpleInfoDTO;
+import com.zhixing.api.dto.trade.TradeStatsDTO;
 import com.zhixing.common.exceptions.BadRequestException;
 import com.zhixing.common.exceptions.BizIllegalException;
 import com.zhixing.common.mq.MqTopics;
@@ -24,6 +25,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -282,5 +285,75 @@ class OrderServiceTest {
         verify(orderMapper).update(any(), any());
         verify(orderMsgService, never()).enqueue(anyLong(), any(), any(), any(), any());
         verify(tradeCouponService, never()).restoreStock(anyLong(), anyLong(), anyInt());
+    }
+
+    // ==================== 管理端看板：交易统计聚合 ====================
+
+    @Test
+    void dashboardStatsAggregatesPaidOrdersAndTrend() {
+        // 已支付订单 3 笔：今日 2 笔（含 TOP1 课程 5）、昨日 1 笔，销售额 = 100 + 50 + 30
+        Order todayA = paidOrder(5L, 100L, java.time.LocalDateTime.now());
+        Order todayB = paidOrder(5L, 50L, java.time.LocalDateTime.now());
+        Order yesterday = paidOrder(7L, 30L, java.time.LocalDateTime.now().minusDays(1));
+        Order unpaid = paidOrder(9L, 999L, null); // 未支付不计入
+        when(orderMapper.selectList(any())).thenReturn(List.of(todayA, todayB, yesterday, unpaid));
+
+        TradeStatsDTO stats = service.dashboardStats();
+
+        assertEquals(3L, stats.getTotalOrders());
+        assertEquals(180L, stats.getTotalSales());
+        // 近 7 日趋势固定 7 个点、按日期升序，今日 2 单/150 分，昨日 1 单/30 分
+        assertEquals(7, stats.getOrderTrend().size());
+        var todayPoint = stats.getOrderTrend().get(6);
+        assertEquals(java.time.LocalDate.now().toString(), todayPoint.getDate());
+        assertEquals(2L, todayPoint.getCount());
+        assertEquals(150L, todayPoint.getAmount());
+        var yesterdayPoint = stats.getOrderTrend().get(5);
+        assertEquals(1L, yesterdayPoint.getCount());
+        // 热门课程 TOP：课程 5 两单居首
+        assertEquals(5L, stats.getHotCourses().get(0).getCourseId());
+        assertEquals(2L, stats.getHotCourses().get(0).getCount());
+    }
+
+    @Test
+    void dashboardStatsFillsEmptyDaysWithZero() {
+        // 无任何订单：订单量/销售额为 0，趋势 7 个点全部补 0，热门课程为空
+        when(orderMapper.selectList(any())).thenReturn(List.of());
+
+        TradeStatsDTO stats = service.dashboardStats();
+
+        assertEquals(0L, stats.getTotalOrders());
+        assertEquals(0L, stats.getTotalSales());
+        assertEquals(7, stats.getOrderTrend().size());
+        stats.getOrderTrend().forEach(p -> {
+            assertEquals(0L, p.getCount());
+            assertEquals(0L, p.getAmount());
+        });
+        assertTrue(stats.getHotCourses().isEmpty());
+    }
+
+    @Test
+    void dashboardStatsLimitsHotCoursesToTop5() {
+        // 6 门课程各有 1 笔已支付订单：热门课程仅取 TOP5
+        java.util.List<Order> orders = new java.util.ArrayList<>();
+        for (long courseId = 1; courseId <= 6; courseId++) {
+            orders.add(paidOrder(courseId, 10L, java.time.LocalDateTime.now()));
+        }
+        when(orderMapper.selectList(any())).thenReturn(orders);
+
+        TradeStatsDTO stats = service.dashboardStats();
+
+        assertEquals(5, stats.getHotCourses().size());
+    }
+
+    /** 构造已支付订单（payTime 为 null 表示未支付） */
+    private Order paidOrder(Long courseId, Long totalFee, java.time.LocalDateTime payTime) {
+        Order o = new Order();
+        o.setId(courseId * 10);
+        o.setCourseId(courseId);
+        o.setTotalFee(totalFee);
+        o.setStatus(1);
+        o.setPayTime(payTime);
+        return o;
     }
 }

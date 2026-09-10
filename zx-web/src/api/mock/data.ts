@@ -343,6 +343,42 @@ export const mockCourses: CourseVO[] = [
       { id: 121, name: '第一章 入门', sections: [{ id: 1211, name: '1.1 快速上手' }] },
     ],
   },
+  {
+    id: 13,
+    name: 'MySQL 8 性能优化与索引设计',
+    coverUrl: cover('online course cover, MySQL database engine and index tree icon, performance optimization, blue and teal tech flat illustration'),
+    price: 22900,
+    categoryIdLv1: 1,
+    categoryIdLv2: 101,
+    teacherId: 2,
+    status: 1,
+    free: 0,
+    publishTimes: 1,
+    enrollNum: 4120,
+    score: 4.8,
+    description: '深入索引底层原理、Explain 执行计划与慢查询优化，覆盖缓存与分库分表，打造高性能数据库。',
+    catalogues: [
+      { id: 131, name: '第一章 索引原理', sections: [{ id: 1311, name: '1.1 B+ 树与聚簇索引' }] },
+    ],
+  },
+  {
+    id: 14,
+    name: 'Vue 3 进阶：Pinia 与组合式 API',
+    coverUrl: cover('online course cover, Vue.js logo with modern SPA UI components, frontend engineering, green and white tech illustration'),
+    price: 17900,
+    categoryIdLv1: 2,
+    categoryIdLv2: 201,
+    teacherId: 2,
+    status: 1,
+    free: 0,
+    publishTimes: 1,
+    enrollNum: 2980,
+    score: 4.6,
+    description: '从组合式 API 到 Pinia 状态管理，再到组件设计模式与性能优化，构建可维护的大型 Vue 3 应用。',
+    catalogues: [
+      { id: 141, name: '第一章 组合式 API', sections: [{ id: 1411, name: '1.1 Setup 与响应式' }] },
+    ],
+  },
 ]
 
 /** 首页轮播 Banner */

@@ -4,7 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhixing.api.client.course.CourseClient;
+import com.zhixing.api.client.learning.LearningClient;
+import com.zhixing.api.client.trade.TradeClient;
+import com.zhixing.api.client.user.UserClient;
 import com.zhixing.api.dto.course.CourseSimpleInfoDTO;
+import com.zhixing.api.dto.learning.DailyActiveDTO;
+import com.zhixing.api.dto.trade.TradeStatsDTO;
 import com.zhixing.insight.domain.dto.ProfileVO;
 import com.zhixing.insight.domain.dto.RecommendVO;
 import com.zhixing.insight.domain.dto.ReportVO;
@@ -18,6 +23,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -38,6 +45,9 @@ public class InsightReportService {
     private final InsightLlmClient llmClient;
     private final InsightReportMapper reportMapper;
     private final CourseClient courseClient;
+    private final UserClient userClient;
+    private final TradeClient tradeClient;
+    private final LearningClient learningClient;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -140,9 +150,9 @@ public class InsightReportService {
         vo.setUserId(userId);
         vo.setWeakness(weakness);
         vo.setSuggestions(suggestions);
-        vo.setSummary(llmClient.generateSummary(dims, weakness, suggestions) != null
-                ? llmClient.generateSummary(dims, weakness, suggestions)
-                : buildRuleSummary(dims, weakness));
+        // 只调用一次大模型；无结果时回退规则总结（原实现重复调用 generateSummary 两次，浪费并拖慢接口）
+        String llm = llmClient.generateSummary(dims, weakness, suggestions);
+        vo.setSummary(llm != null ? llm : buildRuleSummary(dims, weakness));
 
         // 推荐未学习课程
         vo.setCourses(recommendCourses(stats));
@@ -150,23 +160,95 @@ public class InsightReportService {
     }
 
     /**
-     * 全局学情看板
+     * 全局学情看板（管理端数据看板）。
+     * 聚合：用户总量（zx-user）、交易统计（zx-trade）、在售课程（zx-course）、近 7 日日活（zx-learning）。
+     * 返回结构与前端 DashboardVO 对齐：totalUsers / totalOrders / totalSales / totalCourses /
+     * orderTrend / activeTrend / hotCourses。
+     * 任一下游服务不可用时优雅降级为 0/空，保证看板始终可渲染。
      */
     public Map<String, Object> dashboard() {
-        List<InsightReport> reports = reportMapper.selectList(
-                new LambdaQueryWrapper<InsightReport>().eq(InsightReport::getReportDate, LocalDate.now()));
-        long count = reports.size();
-        double avgComprehension = reports.isEmpty() ? 0
-                : reports.stream().mapToInt(r -> nvl(r.getComprehension())).average().orElse(0);
-        double avgQuiz = reports.isEmpty() ? 0
-                : reports.stream().mapToInt(r -> nvl(r.getQuizAbility())).average().orElse(0);
-        long aiCount = reports.stream().filter(r -> Boolean.TRUE.equals(r.getAiGenerated())).count();
-        return Map.of(
-                "reportCount", count,
-                "avgComprehension", Math.round(avgComprehension * 10) / 10.0,
-                "avgQuizAbility", Math.round(avgQuiz * 10) / 10.0,
-                "aiGeneratedCount", aiCount,
-                "date", LocalDate.now().toString());
+        // 1. 用户总量
+        long totalUsers = 0;
+        try {
+            Long count = userClient.queryTotalUsers();
+            totalUsers = count == null ? 0 : count;
+        } catch (Exception e) {
+            log.warn("看板用户总量拉取失败: {}", e.getMessage());
+        }
+
+        // 2. 交易统计（已支付订单量 / 销售额 / 近 7 日订单趋势 / 热门课程）
+        TradeStatsDTO trade = null;
+        try {
+            trade = tradeClient.queryTradeStats();
+        } catch (Exception e) {
+            log.warn("看板交易统计拉取失败: {}", e.getMessage());
+        }
+        long totalOrders = trade == null || trade.getTotalOrders() == null ? 0 : trade.getTotalOrders();
+        long totalSales = trade == null || trade.getTotalSales() == null ? 0 : trade.getTotalSales();
+        Map<String, TradeStatsDTO.TrendPoint> tradeTrend = new HashMap<>();
+        if (trade != null && trade.getOrderTrend() != null) {
+            trade.getOrderTrend().forEach(p -> tradeTrend.put(p.getDate(), p));
+        }
+
+        // 3. 在售课程（总数 + 名称映射）
+        long totalCourses = 0;
+        Map<Long, String> courseNames = new HashMap<>();
+        try {
+            List<CourseSimpleInfoDTO> courses = courseClient.queryAllSimpleInfo();
+            if (courses != null) {
+                totalCourses = courses.size();
+                courses.forEach(c -> courseNames.put(c.getId(), c.getName()));
+            }
+        } catch (Exception e) {
+            log.warn("看板在售课程拉取失败: {}", e.getMessage());
+        }
+
+        // 4. 近 7 日订单趋势（缺失日期补 0）
+        LocalDate today = LocalDate.now();
+        List<Map<String, Object>> orderTrend = new ArrayList<>(7);
+        for (int i = 6; i >= 0; i--) {
+            String date = today.minusDays(i).toString();
+            TradeStatsDTO.TrendPoint p = tradeTrend.get(date);
+            orderTrend.add(Map.of(
+                    "date", date,
+                    "count", p == null || p.getCount() == null ? 0L : p.getCount(),
+                    "amount", p == null || p.getAmount() == null ? 0L : p.getAmount()));
+        }
+
+        // 5. 近 7 日活跃趋势（缺失日期补 0）
+        Map<String, Long> activeByDate = new HashMap<>();
+        try {
+            List<DailyActiveDTO> active = learningClient.queryDailyActive();
+            if (active != null) {
+                active.forEach(a -> activeByDate.put(a.getDate(), a.getCount() == null ? 0L : a.getCount()));
+            }
+        } catch (Exception e) {
+            log.warn("看板日活统计拉取失败: {}", e.getMessage());
+        }
+        List<Map<String, Object>> activeTrend = new ArrayList<>(7);
+        for (int i = 6; i >= 0; i--) {
+            String date = today.minusDays(i).toString();
+            activeTrend.add(Map.of("date", date, "count", activeByDate.getOrDefault(date, 0L)));
+        }
+
+        // 6. 热门课程 TOP5（id → 名称，课程已下架/不存在时降级为"课程 #id"）
+        List<Map<String, Object>> hotCourses = new ArrayList<>();
+        if (trade != null && trade.getHotCourses() != null) {
+            for (TradeStatsDTO.CourseCount c : trade.getHotCourses()) {
+                String name = courseNames.getOrDefault(c.getCourseId(), "课程 #" + c.getCourseId());
+                hotCourses.add(Map.of("name", name, "count", c.getCount() == null ? 0L : c.getCount()));
+            }
+        }
+
+        Map<String, Object> vo = new LinkedHashMap<>();
+        vo.put("totalUsers", totalUsers);
+        vo.put("totalOrders", totalOrders);
+        vo.put("totalSales", totalSales);
+        vo.put("totalCourses", totalCourses);
+        vo.put("orderTrend", orderTrend);
+        vo.put("activeTrend", activeTrend);
+        vo.put("hotCourses", hotCourses);
+        return vo;
     }
 
     // ============ 私有方法 ============

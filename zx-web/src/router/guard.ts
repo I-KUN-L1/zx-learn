@@ -49,6 +49,12 @@ export function setupRouterGuard(router: Router) {
       return goLogin ? { path: '/login', query: { redirect: to.fullPath } } : false
     }
 
+    // 角色级路由守卫：meta.roles 仅允许指定角色访问（如管理端 → admin；超管前端严格拦截，后端 403 兜底）
+    const needRoles = to.matched.flatMap((r) => (r.meta.roles as string[] | undefined) ?? [])
+    if (needRoles.length > 0 && !userStore.hasRole(...(needRoles as ('admin' | 'teacher' | 'student')[]))) {
+      return { path: '/403' }
+    }
+
     // 其余页面放行（公共模块自由浏览）
     return true
   })

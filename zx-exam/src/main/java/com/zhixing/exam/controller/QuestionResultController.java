@@ -1,6 +1,8 @@
 package com.zhixing.exam.controller;
 
 import com.zhixing.common.annotation.NoWrapper;
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import com.zhixing.common.utils.OwnerAccessGuard;
 import com.zhixing.exam.domain.po.QuestionResult;
@@ -12,7 +14,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 答题记录管理
+ * 答题记录管理。
+ * 权限：提交答题为学员端行为，仅学员(2)可操作，管理员/教师一律 403；
+ * 按用户查询记录/统计为内部 Feign 接口，由 OwnerAccessGuard 防水平越权。
  */
 @RestController
 @RequestMapping("/question-results")
@@ -25,6 +29,7 @@ public class QuestionResultController {
      * 提交答题结果（学生）
      */
     @PostMapping
+    @RequireRole(UserRole.STUDENT)
     public R<Long> submit(@RequestBody QuestionResult result) {
         return R.ok(resultService.submit(result));
     }

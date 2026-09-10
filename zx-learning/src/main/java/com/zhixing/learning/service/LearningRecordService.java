@@ -1,6 +1,7 @@
 package com.zhixing.learning.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.zhixing.api.dto.learning.DailyActiveDTO;
 import com.zhixing.api.dto.learning.LearningRecordDTO;
 import com.zhixing.common.exceptions.BadRequestException;
 import com.zhixing.common.exceptions.BizIllegalException;
@@ -12,8 +13,14 @@ import com.zhixing.learning.mapper.LearningRecordMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 学习记录服务
@@ -89,5 +96,32 @@ public class LearningRecordService {
                 .stream()
                 .mapToLong(r -> r.getLearnDuration() == null ? 0L : r.getLearnDuration())
                 .sum();
+    }
+
+    /**
+     * 近 7 日日活统计（内部 Feign 接口）：按最后学习时间落在当日去重用户计数。
+     */
+    public List<DailyActiveDTO> dailyActive() {
+        LocalDate today = LocalDate.now();
+        LocalDateTime start = today.minusDays(6).atStartOfDay();
+        List<LearningRecord> records = learningRecordMapper.selectList(
+                new LambdaQueryWrapper<LearningRecord>()
+                        .select(LearningRecord::getUserId, LearningRecord::getLastLearnTime)
+                        .ge(LearningRecord::getLastLearnTime, start));
+        Map<String, Set<Long>> byDate = new HashMap<>();
+        for (LearningRecord r : records) {
+            LocalDateTime t = r.getLastLearnTime();
+            if (t == null) {
+                continue;
+            }
+            byDate.computeIfAbsent(t.toLocalDate().toString(), k -> new HashSet<>()).add(r.getUserId());
+        }
+        List<DailyActiveDTO> result = new ArrayList<>(7);
+        for (int i = 6; i >= 0; i--) {
+            LocalDate d = today.minusDays(i);
+            String key = d.toString();
+            result.add(new DailyActiveDTO(key, (long) byDate.getOrDefault(key, Set.of()).size()));
+        }
+        return result;
     }
 }

@@ -5,7 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import io.netty.channel.ChannelOption;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -20,11 +22,19 @@ public class InsightLlmClient {
     private final InsightLlmProperties properties;
     private final WebClient webClient;
 
+    private static final Duration CONN_TIMEOUT = Duration.ofSeconds(3);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(15);
+
     public InsightLlmClient(InsightLlmProperties properties) {
         this.properties = properties;
         this.webClient = WebClient.builder()
                 .baseUrl(properties.getBaseUrl())
                 .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
+                // 连接/读取超时兜底：防止上游大模型慢或不可达时阻塞请求线程，导致学情报告接口长时间挂起
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
+                        reactor.netty.http.client.HttpClient.create()
+                                .responseTimeout(READ_TIMEOUT)
+                                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) CONN_TIMEOUT.toMillis())))
                 .build();
     }
 

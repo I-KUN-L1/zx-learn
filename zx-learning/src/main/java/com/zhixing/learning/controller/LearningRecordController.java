@@ -1,8 +1,12 @@
 package com.zhixing.learning.controller;
 
+import com.zhixing.api.dto.learning.DailyActiveDTO;
 import com.zhixing.api.dto.learning.LearningRecordDTO;
 import com.zhixing.common.annotation.NoWrapper;
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
+import com.zhixing.common.utils.InternalOnlyGuard;
 import com.zhixing.common.utils.OwnerAccessGuard;
 import com.zhixing.learning.domain.dto.LearningProgressDTO;
 import com.zhixing.learning.service.LearningRecordService;
@@ -12,7 +16,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * 学习记录
+ * 学习记录。
+ * 权限：提交学习进度为学员端行为，仅学员(2)可操作，管理员/教师一律 403。
  */
 @RestController
 @RequestMapping("/learning-records")
@@ -25,6 +30,7 @@ public class LearningRecordController {
      * 提交/更新学习进度
      */
     @PostMapping("/progress")
+    @RequireRole(UserRole.STUDENT)
     public R<Long> submitProgress(@RequestBody LearningProgressDTO form) {
         return R.ok(learningRecordService.submitProgress(form));
     }
@@ -49,5 +55,16 @@ public class LearningRecordController {
     public Long sumDuration(@PathVariable("userId") Long userId) {
         OwnerAccessGuard.checkOwnerOrInternal(userId);
         return learningRecordService.sumDuration(userId);
+    }
+
+    /**
+     * 近 7 日日活统计（内部 Feign 接口，供管理端看板消费，不包装）。
+     * 仅限服务间调用：外部用户（含管理员）经网关访问一律 403。
+     */
+    @GetMapping("/stats/active")
+    @NoWrapper
+    public List<DailyActiveDTO> dailyActive() {
+        InternalOnlyGuard.checkInternal();
+        return learningRecordService.dailyActive();
     }
 }

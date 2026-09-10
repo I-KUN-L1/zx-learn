@@ -106,11 +106,14 @@ onMounted(fetchCourse)
               <span v-if="course.free !== 1" class="zx-text-secondary ml-2 text-sm">支持优惠券抵扣</span>
             </div>
             <div class="flex gap-3">
-              <el-button round size="large" @click="onAddCart">加入购物车</el-button>
+              <!-- 购买/购物车入口对学员开放；管理员端一律不渲染（RBAC） -->
+              <template v-if="!userStore.isAdmin">
+                <el-button round size="large" @click="onAddCart">加入购物车</el-button>
+                <el-button type="primary" round size="large" @click="onBuy">
+                  {{ course.free === 1 ? '加入学习' : '立即购买' }}
+                </el-button>
+              </template>
               <el-button round size="large" @click="router.push('/assistant')">咨询 AI 助教</el-button>
-              <el-button type="primary" round size="large" @click="onBuy">
-                {{ course.free === 1 ? '加入学习' : '立即购买' }}
-              </el-button>
             </div>
           </div>
         </div>

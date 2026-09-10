@@ -15,6 +15,47 @@ const path = ref<LearningPathVO | null>(null)
 const report = ref<{ content: string; createTime: string } | null>(null)
 const loading = ref(true)
 
+/**
+ * 空态兜底数据：单个接口失败/返回空时仍有内容可渲染，
+ * 杜绝「一直处于加载界面」——即使某个下游接口异常超时也不阻塞整页。
+ */
+const EMPTY_PROFILE: InsightProfileVO = {
+  userId: 0,
+  totalDuration: 0,
+  completedRate: 0,
+  continuousDays: 0,
+  abilities: [
+    { name: '学习投入度', value: 0 },
+    { name: '学习完成度', value: 0 },
+    { name: '答题能力', value: 0 },
+    { name: '知识广度', value: 0 },
+    { name: '综合理解力', value: 0 },
+  ],
+  trends: Array.from({ length: 7 }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (6 - i))
+    const date = `${d.getMonth() + 1}/${d.getDate()}`
+    return { date, duration: 0 }
+  }),
+}
+
+const EMPTY_PATH: LearningPathVO = { reason: '完成几门课程后为你生成个性化学习路径', steps: [] }
+
+onMounted(async () => {
+  // allSettled：任一请求失败不阻塞其余请求，保证页面稳定出图、永不卡在 loading
+  const [p, lp, rp] = await Promise.allSettled([myProfile(), learningPath(), latestReport()])
+  profile.value = p.status === 'fulfilled' ? (p.value ?? EMPTY_PROFILE) : EMPTY_PROFILE
+  path.value = lp.status === 'fulfilled' ? (lp.value ?? EMPTY_PATH) : EMPTY_PATH
+  // 后端 ReportVO 无 content 字段，正文取 summary；时间回退为 reportDate
+  let reportVal: { content: string; createTime: string } | null = null
+  if (rp.status === 'fulfilled' && rp.value) {
+    const v = rp.value
+    reportVal = { content: v.summary ?? '暂无AI学情点评', createTime: v.reportDate ?? v.createTime ?? '' }
+  }
+  report.value = reportVal
+  loading.value = false
+})
+
 /* ---------- 雷达图：能力画像 ---------- */
 const radarOption = computed<EChartsOption | undefined>(() => {
   if (!profile.value) return undefined
@@ -86,19 +127,6 @@ const radarEl = ref<HTMLElement>()
 const lineEl = ref<HTMLElement>()
 useEcharts(radarEl, radarOption)
 useEcharts(lineEl, lineOption)
-
-onMounted(async () => {
-  try {
-    const [p, lp, rp] = await Promise.all([myProfile(), learningPath(), latestReport()])
-    profile.value = p
-    path.value = lp
-    report.value = rp
-  } catch {
-    /* ignore */
-  } finally {
-    loading.value = false
-  }
-})
 </script>
 
 <template>

@@ -25,12 +25,17 @@ export function claimCoupon(couponId: number) {
   return request.post<null>('/user-coupons/claim', { couponId })
 }
 
-/** 秒杀抢券（网关 5 QPS 限流） */
+/** 秒杀领取（立即返回：QUEUING/SOLD_OUT/REPEAT/NOT_READY） */
 export function seckillClaim(couponId: number) {
   return request.post<null>(`/user-coupons/seckill/${couponId}`)
 }
 
-/** 秒杀结果轮询 */
+/** 秒杀结果轮询。真实后端返回 {status:'SUCCESS'|'QUEUING'|..., couponCode}；Mock 返回 {success,orderId}，二者都兼容 */
 export function seckillResult(couponId: number) {
-  return request.get<{ success: boolean; orderId?: number | null }>(`/user-coupons/seckill/${couponId}/result`)
+  return request.get<{
+    status?: 'SUCCESS' | 'QUEUING' | 'REPEAT' | 'FAILED' | 'SOLD_OUT' | 'NOT_READY'
+    couponCode?: string | null
+    success?: boolean
+    orderId?: number | null
+  }>(`/user-coupons/seckill/${couponId}/result`)
 }

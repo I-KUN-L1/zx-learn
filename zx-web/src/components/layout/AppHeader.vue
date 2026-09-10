@@ -81,8 +81,10 @@ async function onLogout() {
               <el-dropdown-item command="/learning">学习中心</el-dropdown-item>
               <el-dropdown-item command="/trade/orders">我的订单</el-dropdown-item>
               <el-dropdown-item command="/trade/coupons">优惠券</el-dropdown-item>
-              <!-- 管理后台入口对所有人可见，无权限由后端 403 兜底 -->
-              <el-dropdown-item command="admin" divided>管理后台</el-dropdown-item>
+              <!-- 管理后台入口：仅管理员可见（学生/教师一律不渲染） -->
+              <el-dropdown-item v-if="userStore.isAdmin" command="/admin/dashboard" divided>
+                管理后台
+              </el-dropdown-item>
               <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>

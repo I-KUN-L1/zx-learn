@@ -6,7 +6,7 @@ import com.zhixing.common.domain.PageDTO;
 import com.zhixing.common.domain.PageQuery;
 import com.zhixing.common.domain.R;
 import com.zhixing.promotion.domain.dto.CouponFormDTO;
-import com.zhixing.promotion.domain.po.Coupon;
+import com.zhixing.promotion.domain.vo.CouponVO;
 import com.zhixing.promotion.service.CouponService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -30,15 +30,16 @@ public class CouponController {
     }
 
     @GetMapping("/page")
-    public R<PageDTO<Coupon>> page(PageQuery query,
+    public R<PageDTO<CouponVO>> page(PageQuery query,
                                    @RequestParam(required = false) String name,
-                                   @RequestParam(required = false) Integer status) {
-        return R.ok(couponService.page(query, name, status));
+                                   @RequestParam(required = false) Integer status,
+                                   @RequestParam(required = false) Integer type) {
+        return R.ok(couponService.page(query, name, status, type));
     }
 
     @GetMapping("/{id}")
-    public R<Coupon> getById(@PathVariable Long id) {
-        return R.ok(couponService.getById(id));
+    public R<CouponVO> getById(@PathVariable Long id) {
+        return R.ok(couponService.toVO(couponService.getById(id)));
     }
 
     @PutMapping("/{id}/issue")

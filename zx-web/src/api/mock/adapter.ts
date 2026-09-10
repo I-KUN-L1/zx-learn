@@ -63,15 +63,18 @@ const routes: MockRoute[] = [
       if (!cellPhone || !password) return R_ERR(400, '手机号或密码不能为空')
       // 统一登录：角色由账号属性（后端）决定，这里按手机号模拟
       const isAdmin = cellPhone === '13800000001'
+      const isTeacher = cellPhone === '13800000002'
       const firstLogin = isAdmin && password === 'admin123' && !localStorage.getItem(FIRST_CHANGED_KEY)
       if (password.length < 6) return R_ERR(401, '用户名或密码错误')
+      const role = isAdmin ? 'admin' : isTeacher ? 'teacher' : 'student'
       return {
-        accessToken: isAdmin ? `mock-admin-token-${Date.now()}` : `mock-student-token-${Date.now()}`,
+        accessToken: isAdmin ? `mock-admin-token-${Date.now()}` : isTeacher ? `mock-teacher-token-${Date.now()}` : `mock-student-token-${Date.now()}`,
         expireTime: Date.now() + 30 * 60 * 1000,
         refreshToken: isAdmin ? `mock-admin-refresh-${Date.now()}` : `mock-student-refresh-${Date.now()}`,
         userId: 1,
-        username: isAdmin ? '管理员小知' : '知行学员',
+        username: isAdmin ? '管理员小知' : isTeacher ? '王老师' : '知行学员',
         firstLogin,
+        role,
       }
     },
   },
@@ -394,18 +397,17 @@ const routes: MockRoute[] = [
     method: 'post',
     pattern: /^\/orders\/placeOrder$/,
     handler: ({ data }) => {
-      const ids = (data.courseIds as number[]) ?? []
-      if (!ids.length) return R_ERR(400, '请选择要购买的课程')
-      const details = ids.map((cid, i) => {
-        const c = mockCourses.find((x) => x.id === cid)!
-        return { id: orderSeq * 10 + i, orderId: orderSeq, courseId: c.id, courseName: c.name, coverUrl: c.coverUrl, price: c.price }
-      })
-      const totalAmount = details.reduce((s, d) => s + d.price, 0)
+      // 与后端 OrderFormDTO 对齐：单课程单订单（courseId 而非 courseIds）
+      const courseId = Number(data.courseId)
+      const course = mockCourses.find((x) => x.id === courseId)
+      if (!course) return R_ERR(400, '课程不存在')
+      const detail = { id: orderSeq * 10, orderId: orderSeq, courseId: course.id, courseName: course.name, coverUrl: course.coverUrl, price: course.price }
+      const totalAmount = course.price
       let discountAmount = 0
       let couponId: number | undefined
-      if (data.couponId) {
-        couponId = Number(data.couponId)
-        const uc = userCoupons.find((x) => x.id === couponId && x.status === 1)
+      if (data.userCouponId) {
+        couponId = Number(data.couponId ?? data.userCouponId)
+        const uc = userCoupons.find((x) => x.id === Number(data.userCouponId) && x.status === 1)
         const cp = coupons.find((x) => x.id === uc?.couponId)
         if (uc && cp && totalAmount >= cp.thresholdAmount) {
           discountAmount = Math.round((totalAmount * cp.discountValue) / 10000)
@@ -423,13 +425,11 @@ const routes: MockRoute[] = [
         couponId,
         status: 1,
         createTime: new Date().toLocaleString('zh-CN', { hour12: false }),
-        details,
+        details: [detail],
       }
       orders.unshift(order)
-      for (const cid of ids) {
-        const idx = cart.findIndex((x) => x.courseId === cid)
-        if (idx >= 0) cart.splice(idx, 1)
-      }
+      const idx = cart.findIndex((x) => x.courseId === courseId)
+      if (idx >= 0) cart.splice(idx, 1)
       return order
     },
   },

@@ -47,6 +47,8 @@ spring:
               - uri: http://localhost:8083
             user-service:
               - uri: http://localhost:8082
+            trade-service:
+              - uri: http://localhost:8087
 
 mybatis-plus:
   configuration:

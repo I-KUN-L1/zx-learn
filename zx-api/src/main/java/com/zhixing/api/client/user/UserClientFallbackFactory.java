@@ -61,6 +61,11 @@ public class UserClientFallbackFactory implements FallbackFactory<UserClient> {
             public UserDTO queryMe() {
                 return null;
             }
+
+            @Override
+            public Long queryTotalUsers() {
+                return null;
+            }
         };
     }
 }
