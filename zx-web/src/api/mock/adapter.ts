@@ -485,6 +485,26 @@ const routes: MockRoute[] = [
   },
   { method: 'get', pattern: /^\/user-coupons$/, handler: () => userCoupons },
   {
+    method: 'get',
+    pattern: /^\/user-coupons\/page$/,
+    handler: ({ params }) => {
+      const pageNo = Number(params.pageNo ?? 1)
+      const pageSize = Number(params.pageSize ?? 10)
+      const status = params.status != null && params.status !== '' ? Number(params.status) : null
+      const list = userCoupons.filter((u) => status == null || u.status === status)
+      return { total: list.length, pages: Math.ceil(list.length / pageSize), list: list.slice((pageNo - 1) * pageSize, pageNo * pageSize) }
+    },
+  },
+  {
+    method: 'get',
+    pattern: /^\/coupons\/(\d+)$/,
+    handler: ({ path }) => {
+      const c = coupons.find((x) => x.id === Number(path[0]))
+      if (!c) return R_ERR(404, '优惠券不存在')
+      return c
+    },
+  },
+  {
     method: 'post',
     pattern: /^\/user-coupons\/claim$/,
     handler: ({ data }) => {

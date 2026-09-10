@@ -20,18 +20,23 @@ const selectedCouponId = ref<number | undefined>()
 const submitting = ref(false)
 const loading = ref(true)
 
-const totalAmount = computed(() => courses.value.reduce((s, c) => s + (c.price ?? 0), 0))
+/** 优惠券只能用于单门课程的订单（后端逐门课程一单、每张券限用一次），多课程时禁用 */
+const canUseCoupon = computed(() => courses.value.length === 1)
 
-/** 选中优惠券可抵扣金额（简化口径：满减券固定减、折扣券按比例） */
-const discountAmount = computed(() => {
+/** 选中的用户券对单门课程的最大可抵金额（按后端固定面值核销 deduction=price-totalFee） */
+function discountOf(course: CourseVO): number {
   const uc = coupons.value.find((c) => c.id === selectedCouponId.value)
   if (!uc) return 0
-  if ((uc.thresholdAmount ?? 0) > totalAmount.value) return 0
-  if ((uc.thresholdAmount ?? 0) > 0) return uc.discountValue ?? 0
-  // 无门槛折扣券：按折扣比例抵扣
-  return Math.round((totalAmount.value * (uc.discountValue ?? 0)) / 100)
-})
+  const price = course.price ?? 0
+  if (price <= 0) return 0
+  // 满减券需满足门槛；无门槛券直接立减
+  if ((uc.thresholdAmount ?? 0) > price) return 0
+  // 兜底封顶不超过课程价，避免实付为负导致后端校验失败
+  return Math.min(uc.discountValue ?? 0, price)
+}
 
+const totalAmount = computed(() => courses.value.reduce((s, c) => s + (c.price ?? 0), 0))
+const discountAmount = computed(() => courses.value.reduce((s, c) => s + discountOf(c), 0))
 const realAmount = computed(() => Math.max(0, totalAmount.value - discountAmount.value))
 
 async function init() {
@@ -40,6 +45,8 @@ async function init() {
     const details = await Promise.all(courseIds.value.map((id) => getCourse(id)))
     courses.value = details
     coupons.value = (await myCoupons()).filter((c) => c.status === 1)
+    // 多课程时不允许用券（后端逐课一单，一张券只能用于一单）
+    if (!canUseCoupon.value) selectedCouponId.value = undefined
   } catch {
     /* ignore */
   } finally {
@@ -57,6 +64,8 @@ async function onSubmit() {
     for (const course of courses.value) {
       await placeOrder({
         courseId: course.id,
+        // 实付金额：无券 = 课程价（后端默认）；有券 = 课程价 - 抵扣，供后端做金额一致性校验
+        totalFee: course.price - discountOf(course),
         couponId: uc?.couponId,
         userCouponId: uc?.id,
       })
@@ -108,8 +117,11 @@ void ORDER_STATUS
           </div>
         </div>
 
-        <!-- 优惠券选择 -->
+        <!-- 优惠券选择（多课程购买时不支持用券） -->
         <h2 class="mt-8 font-bold">选择优惠券</h2>
+        <p v-if="!canUseCoupon" class="zx-text-secondary mt-1 text-xs">
+          一次购买多门课程时不支持使用优惠券，请逐门课程单独下单（每张券限用于一单）。
+        </p>
         <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label
             class="zx-coupon-option flex cursor-pointer items-center justify-between rounded-xl border-2 p-4 transition-colors"
@@ -123,8 +135,11 @@ void ORDER_STATUS
             v-for="c in coupons"
             :key="c.id"
             class="zx-coupon-option flex cursor-pointer items-center justify-between rounded-xl border-2 p-4 transition-colors"
-            :class="{ 'zx-coupon-option--active': selectedCouponId === c.id }"
-            @click="selectedCouponId = c.id"
+            :class="{
+              'zx-coupon-option--active': selectedCouponId === c.id,
+              'zx-coupon-option--disabled': !canUseCoupon,
+            }"
+            @click="canUseCoupon && (selectedCouponId = c.id)"
           >
             <div class="min-w-0">
               <div class="truncate text-sm font-medium">{{ c.couponName }}</div>
@@ -133,7 +148,7 @@ void ORDER_STATUS
               </div>
             </div>
             <span class="font-bold text-primary">
-              {{ (c.thresholdAmount ?? 0) > 0 ? `-${formatPrice(c.discountValue)}` : `${Math.round((c.discountValue ?? 0) / 100)} 折` }}
+              {{ (c.thresholdAmount ?? 0) > 0 ? `-${formatPrice(c.discountValue)}` : `立减 ${formatPrice(c.discountValue)}` }}
             </span>
           </label>
         </div>
@@ -187,5 +202,12 @@ void ORDER_STATUS
 .zx-coupon-option--active {
   border-color: var(--zx-primary);
   background: var(--zx-primary-bg);
+}
+.zx-coupon-option--disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.zx-coupon-option--disabled:hover {
+  border-color: var(--zx-border);
 }
 </style>

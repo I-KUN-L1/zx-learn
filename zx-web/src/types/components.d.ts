@@ -13,6 +13,8 @@ declare module 'vue' {
     AppFooter: typeof import('./../components/layout/AppFooter.vue')['default']
     AppHeader: typeof import('./../components/layout/AppHeader.vue')['default']
     ChatMessageItem: typeof import('./../components/ai/ChatMessageItem.vue')['default']
+    CouponCard: typeof import('./../components/promotion/CouponCard.vue')['default']
+    CouponList: typeof import('./../components/promotion/CouponList.vue')['default']
     CourseCard: typeof import('./../components/course/CourseCard.vue')['default']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']
     ElBadge: typeof import('element-plus/es')['ElBadge']

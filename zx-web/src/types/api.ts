@@ -273,6 +273,8 @@ export interface OrderVO {
 export interface PlaceOrderDTO {
   /** 课程 id（后端逐门课程生成一张订单） */
   courseId: number
+  /** 实付金额（分）；无券可省略（后端默认课程价），有券必须传优惠后金额 */
+  totalFee?: number
   /** 优惠券模板 id */
   couponId?: number
   /** 用户券 id（用户领取到的具体一张券） */

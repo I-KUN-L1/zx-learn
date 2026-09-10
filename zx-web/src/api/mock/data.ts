@@ -476,6 +476,8 @@ export const mockCoupons: CouponVO[] = [
 export const mockUserCoupons: UserCouponVO[] = [
   { id: 1, userId: 1, couponId: 1, couponName: '新人立减券', discountValue: 1000, thresholdAmount: 0, status: 1, createTime: '2026-08-20 10:12:00' },
   { id: 2, userId: 1, couponId: 2, couponName: '满 300 减 60 通用券', discountValue: 6000, thresholdAmount: 30000, status: 1, createTime: '2026-08-25 15:40:00' },
+  { id: 3, userId: 1, couponId: 3, couponName: '爆款课程 5 折秒杀券', discountValue: 5000, thresholdAmount: 0, status: 2, createTime: '2026-09-02 10:05:00' },
+  { id: 4, userId: 1, couponId: 5, couponName: '全场满 500 减 120', discountValue: 12000, thresholdAmount: 50000, status: 3, createTime: '2026-07-15 09:00:00' },
 ]
 
 /** 我的订单 */

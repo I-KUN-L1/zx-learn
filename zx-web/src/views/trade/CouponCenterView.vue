@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { pageCoupons, myCoupons } from '@/api/promotion'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { claimCoupon, myCoupons, pageCoupons, seckillClaim, seckillResult } from '@/api/promotion'
 import { formatPrice } from '@/utils/format'
-import SeckillCard from '@/components/promotion/SeckillCard.vue'
-import SkeletonCards from '@/components/common/SkeletonCards.vue'
+import CouponList from '@/components/promotion/CouponList.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import type { CouponVO, UserCouponVO } from '@/types/api'
 
@@ -13,6 +13,8 @@ const total = ref(0)
 const pages = ref(0)
 const loading = ref(true)
 const mine = ref<UserCouponVO[]>([])
+/** 正在领取中的 couponId */
+const claimingId = ref<number>(0)
 
 /** 领取状态（本地映射：couponId -> 已领取） */
 const claimedIds = computed(() => new Set(mine.value.map((m) => m.couponId)))
@@ -39,8 +41,46 @@ async function fetchMine() {
   }
 }
 
-async function onClaimed() {
-  await fetchMine()
+/** 统一领取入口：type=2 走秒杀 + 结果轮询，其余走普通领券 */
+async function onClaim(c: CouponVO) {
+  if (claimingId.value) return
+  claimingId.value = c.id
+  try {
+    if (c.type === 2) {
+      // 秒杀：Lua 原子预扣 → MQ 异步落库 → 轮询结果（对齐后端真实链路）
+      await seckillClaim(c.id)
+      for (let i = 0; i < 6; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        const res = await seckillResult(c.id)
+        if (res.success || res.status === 'SUCCESS') {
+          ElMessageBox.alert(`恭喜你成功抢到「${c.name}」！`, '秒杀成功', {
+            confirmButtonText: '太好了',
+            type: 'success',
+          })
+          break
+        } else if (res.status === 'QUEUING') {
+          continue
+        } else {
+          const msg: Record<string, string> = {
+            SOLD_OUT: '手慢了，库存已抢光',
+            REPEAT: '你已经领取过该秒杀券了',
+            FAILED: '领取失败，请稍后再试',
+            NOT_READY: '秒杀活动尚未开始',
+          }
+          ElMessage.warning(msg[res.status as string] || '未抢到本次秒杀')
+          break
+        }
+      }
+    } else {
+      await claimCoupon(c.id)
+      ElMessage.success('领取成功，快去下单使用吧')
+    }
+  } catch {
+    /* 全局拦截器已提示 */
+  } finally {
+    claimingId.value = 0
+    await fetchMine()
+  }
 }
 
 onMounted(() => {
@@ -63,23 +103,14 @@ onMounted(() => {
       </div>
     </div>
 
-    <SkeletonCards v-if="loading" :count="6" />
-    <EmptyState v-else-if="!coupons.length" description="暂无可领优惠券，敬请期待" />
-    <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <div v-for="c in coupons" :key="c.id" class="relative">
-        <SeckillCard :coupon="c" @claimed="onClaimed" />
-        <el-tag
-          v-if="claimedIds.has(c.id)"
-          type="success"
-          effect="dark"
-          size="small"
-          class="absolute left-4 top-4 z-10"
-          round
-        >
-          已领取
-        </el-tag>
-      </div>
-    </div>
+    <CouponList
+      :coupons="coupons"
+      :loading="loading"
+      :claimed-ids="claimedIds"
+      :claiming-id="claimingId"
+      empty-text="暂无可领优惠券，敬请期待"
+      @claim="onClaim"
+    />
 
     <div v-if="pages > 1" class="mt-8 flex justify-center">
       <el-pagination

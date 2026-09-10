@@ -20,6 +20,16 @@ export function myCoupons() {
   return request.get<UserCouponVO[]>('/user-coupons')
 }
 
+/** 我的优惠券（分页）。status：1 未使用 2 已使用 3 已过期 */
+export function myCouponsPage(params: PageQuery & { status?: number | '' }) {
+  return request.get<PageDTO<UserCouponVO>>('/user-coupons/page', params as Record<string, unknown>)
+}
+
+/** 优惠券详情 */
+export function couponDetail(couponId: number) {
+  return request.get<CouponVO>(`/coupons/${couponId}`)
+}
+
 /** 普通领券 */
 export function claimCoupon(couponId: number) {
   return request.post<null>('/user-coupons/claim', { couponId })
