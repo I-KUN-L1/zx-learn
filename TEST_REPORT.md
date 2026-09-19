@@ -242,11 +242,15 @@
 
 ## 五、隐私保护与项目瘦身
 
+### 5.1 内容迁移
 
 | 项 | 结果 |
 |---|---|
 | 迁移去向 | `D:\1\myself`（个人材料目录，与产品仓库物理隔离） |
-| 归档留痕 | `D:\1\myself\zx-learn-docs\PRIVACY-MIGRATION-2026-09-18.md`（完整清单 + 处理记录） |
+| 实体文件 | 7 个个人材料文件已确认**不在项目内**（完整清单见本地归档记录，不随仓库分发） |
+| 残留引用 | 3 处对外宣传性引用已移除：`README.md`、`docs/CHANGELOG.md` 中指向个人文档的表述与链接 |
+| 归档留痕 | `D:\1\myself\zx-learn-docs\` 下保留完整迁移清单与处理记录（仓库外） |
+| 复核 | 全库扫描：项目内已无个人材料相关表述；剩余命中仅为**产品业务数据**（在线教育平台的课程名与 AI 演示文案），属正常功能内容 |
 
 ### 5.2 隐私隔离（`.gitignore`）
 
@@ -257,9 +261,11 @@
 | IDE 本地配置 | `.idea/dataSources*.xml`、`.idea/workspace.xml`、`.idea/shelf/` （含数据库连接串与本机绝对路径） |
 | 本地环境变量覆盖 | `.env.local`、`.env.*.local`、`zx-web/.env*.local`（`.env.example` 仍保留入库） |
 | 密钥 / 证书 / 凭据 | `*.pem`、`*.key`、`*.p12`、`*.pfx`、`*.jks`、`*.keystore`、`id_rsa*`、`id_ed25519*`、`known_hosts`、`authorized_keys`、`*.secret`、`*credentials*.json` |
+| 个人材料与私有文档 | 规则已移入 `.git/info/exclude`（本地生效、不随仓库分发），仓库内 `.gitignore` 不再出现相关名称 |
 | 数据导出 / 备份 | `*.dump`、`*.sql.gz`、`dumps/`、`backup/`、`*.bak` |
 | 缓存与本地依赖 | `__pycache__/`、`*.py[cod]`、`.pytest_cache/`、`hs_err_pid*.log`、`*.hprof`、`node_modules/`、`.pnpm-store/` |
 
+**实测结论**：`.env`、`.bootstrap-credentials`、`.idea/workspace.xml`、`.env.local`、`*.pem`、`id_rsa`、`app.jks`、`scripts/__pycache__/*.pyc`、`node_modules`、`.pnpm-store` 全部 **[✔已忽略]**；`.env.example`、`zx-web/.env.example` 作为模板 **[✔保留跟踪]**。个人材料类规则改由 `.git/info/exclude` 承载，本地实测同样 **[✔已忽略]**，且不产生仓库内痕迹。
 同时确认仓库内**不存在** `.pem / .key / .jks / id_rsa` 等实体密钥文件，`application*.yml` 中**无硬编码密码**，凭据全部走环境变量注入。
 
 ### 5.3 项目瘦身
@@ -304,6 +310,7 @@
 2. **质量**：单元测试 **329/329**、后端断言 **460/460**、前端断言 **56/56**、接口矩阵探测 **738/738**（246 端点 × 3 身份，0 个 5xx）—— **全部通过，0 失败、0 阻断性缺陷**。
 3. **性能**：核心接口 P95 = **43ms**（阈值 500ms），200 并发请求零失败、**655.3 RPS**。
 4. **缺陷闭环**：本轮 **4 个缺陷全部修复并回归验证**（P1 × 2 / P2 × 2），根因均在测试脚本与测试数据层面，产品代码行为正确。
+5. **隐私**：个人材料类内容已全部迁出至仓库外目录，项目内无残留；密钥与本地配置已加入忽略列表并实测生效，相关防护规则不再出现在仓库文件中。
 6. **瘦身**：释放 **3.5 GB**，项目由 2.7 GB 降至 **6.0 MB**（含 `.git` 1.4 MB），工作区仅保留源码、核心配置与测试报告，无冗余数据。
 7. **复核**：终检实测 18 模块源码完好（**396 个 `.java`**，pom 齐全），`target` / `node_modules` / `dist` / `__pycache__` 残留均为 **0**，无 > 1 MB 冗余大文件。
 

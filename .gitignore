@@ -49,7 +49,7 @@ nohup.out
 ### JMeter 原始压测数据（体积过大不入库，结论数据见 docs/PERF.md）###
 perf-test/results/
 
-### 个人材料（隐私，不入库）###
+### 本地部署产物（不入库）###
 .deploy/
 
 ### 本地运行产物 ###
@@ -97,7 +97,6 @@ authorized_keys
 *.secret
 *credentials*.json
 service-account*.json
-
 
 ### 数据导出 / 备份（可能含真实用户数据）###
 *.dump
