@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -32,7 +34,6 @@ public class InsightAggregateService {
         // 学习记录
         List<LearningRecordDTO> records = safeLearningRecords(userId);
         long totalDuration = 0;
-        int courseCount = 0;
         int finished = 0;
         int progressSum = 0;
         for (LearningRecordDTO r : records) {
@@ -42,12 +43,13 @@ public class InsightAggregateService {
             }
             progressSum += r.getProgress() == null ? 0 : r.getProgress();
         }
-        courseCount = (int) records.stream().map(LearningRecordDTO::getCourseId).distinct().count();
+        int courseCount = (int) records.stream().map(LearningRecordDTO::getCourseId).distinct().count();
         stats.setTotalDuration(totalDuration);
         stats.setCourseCount(courseCount);
         stats.setFinishedCourseCount(finished);
         stats.setAvgProgress(records.isEmpty() ? 0 : Math.min(100, progressSum / records.size()));
         stats.setCourseIds(records.stream().map(LearningRecordDTO::getCourseId).distinct().toList());
+        stats.setDailyDurations(dailyDurations(records));
 
         // 答题统计
         Map<String, Object> quizStats = safeQuizStats(userId);
@@ -61,9 +63,43 @@ public class InsightAggregateService {
         // 活跃天数：每 5 条学习记录估算 1 个活跃天
         stats.setActiveDays(records.isEmpty() ? 0 : Math.max(1, records.size() / 5));
 
-        log.debug("学情聚合完成 userId={}, 时长={}s, 课程={}, 答题={}, 正确率={}%",
-                userId, totalDuration, courseCount, count, accuracy);
+        // 连续签到天数（学习服务不可用时降级为 0）
+        stats.setSignStreak(safeSignStreak(userId));
+
+        log.debug("学情聚合完成 userId={}, 时长={}s, 课程={}, 答题={}, 正确率={}%, 连续签到={}天",
+                userId, totalDuration, courseCount, count, accuracy, stats.getSignStreak());
         return stats;
+    }
+
+    /**
+     * 近 7 日每日学习时长（秒）：按记录最后学习时间归属日期汇总，缺失日期补 0。
+     */
+    private Map<String, Long> dailyDurations(List<LearningRecordDTO> records) {
+        LocalDate today = LocalDate.now();
+        Map<String, Long> daily = new HashMap<>();
+        for (int i = 0; i < 7; i++) {
+            daily.put(today.minusDays(i).toString(), 0L);
+        }
+        for (LearningRecordDTO r : records) {
+            if (r.getLastLearnTime() == null) {
+                continue;
+            }
+            String date = r.getLastLearnTime().toLocalDate().toString();
+            if (daily.containsKey(date)) {
+                daily.merge(date, r.getLearnDuration() == null ? 0L : r.getLearnDuration(), Long::sum);
+            }
+        }
+        return daily;
+    }
+
+    private int safeSignStreak(Long userId) {
+        try {
+            Integer streak = learningClient.userSignStreak(userId);
+            return streak == null ? 0 : streak;
+        } catch (Exception e) {
+            log.warn("拉取连续签到天数失败 userId={}: {}", userId, e.getMessage());
+            return 0;
+        }
     }
 
     private List<LearningRecordDTO> safeLearningRecords(Long userId) {
@@ -76,12 +112,21 @@ public class InsightAggregateService {
         }
     }
 
+    /**
+     * 答题统计：下游异常<b>或返回 null</b> 都降级为全 0。
+     * （历史缺陷：只 catch 异常，未校验 null，下游返回空体时 NPE → 500「系统繁忙」）
+     */
     private Map<String, Object> safeQuizStats(Long userId) {
         try {
-            return examClient.statsByUser(userId);
+            Map<String, Object> stats = examClient.statsByUser(userId);
+            return stats == null ? emptyQuizStats() : stats;
         } catch (Exception e) {
             log.warn("拉取答题统计失败 userId={}: {}", userId, e.getMessage());
-            return Map.of("count", 0, "correct", 0, "accuracy", 0.0);
+            return emptyQuizStats();
         }
+    }
+
+    private Map<String, Object> emptyQuizStats() {
+        return Map.of("count", 0L, "correct", 0L, "accuracy", 0.0);
     }
 }

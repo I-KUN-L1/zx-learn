@@ -3,6 +3,7 @@ package com.zhixing.common.advice;
 import com.zhixing.common.domain.R;
 import com.zhixing.common.exceptions.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
@@ -10,7 +11,11 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 统一异常处理
@@ -19,9 +24,23 @@ import org.springframework.web.server.ResponseStatusException;
 @RestControllerAdvice
 public class CommonExceptionAdvice {
 
+    /** 从 MySQL 约束错误消息中提取列名，如 "Field 'name'..." / "Data too long for column 'cover_url'" */
+    private static final Pattern COLUMN_PATTERN =
+            Pattern.compile("(?:Field|column) '([^']+)'", Pattern.CASE_INSENSITIVE);
+
     @ExceptionHandler(UnauthorizedException.class)
     public R<Void> handleUnauthorized(UnauthorizedException e) {
         log.warn("未授权：{}", e.getMessage());
+        return R.error(e.getCode(), e.getMessage());
+    }
+
+    /**
+     * 账号被禁用：返回业务码 423（HTTP 仍为 200，前端读 body.code 弹"请联系管理员"）。
+     * 必须排在 CommonException 兜底之前单独声明，保证专属码不被泛化。
+     */
+    @ExceptionHandler(AccountDisabledException.class)
+    public R<Void> handleAccountDisabled(AccountDisabledException e) {
+        log.warn("账号已禁用：{}", e.getMessage());
         return R.error(e.getCode(), e.getMessage());
     }
 
@@ -110,6 +129,50 @@ public class CommonExceptionAdvice {
         };
         log.warn("请求状态异常 {}: {}", status, e.getMessage());
         return R.error(status, msg);
+    }
+
+    /**
+     * 数据完整性约束失败（必填列缺失 / 唯一键冲突 / 字段超长）。
+     * <p>
+     * 这类错误本质是**调用方数据问题**，不是服务端故障：例如 menu.name 为
+     * NOT NULL 无默认值时，MyBatis-Plus 会跳过 null 字段、生成不含 name 列的
+     * INSERT，数据库报「Field 'name' doesn't have a default value」。
+     * 原先一律落入兜底返回 500「系统繁忙，请稍后再试」——把"你漏填必填项"
+     * 说成"系统挂了"，既误导用户也让定位困难。这里映射为 400 并给出可读原因。
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public R<Void> handleDataIntegrity(DataIntegrityViolationException e) {
+        String cause = e.getMostSpecificCause() != null
+                ? e.getMostSpecificCause().getMessage() : e.getMessage();
+        log.warn("数据完整性约束失败：{}", cause);
+        return R.error(400, describeIntegrity(cause));
+    }
+
+    /**
+     * 非 multipart 请求打到文件上传接口：返回 400，而不是 500「系统繁忙」。
+     */
+    @ExceptionHandler(MultipartException.class)
+    public R<Void> handleMultipart(MultipartException e) {
+        log.warn("文件上传请求格式错误：{}", e.getMessage());
+        return R.error(400, "请以 multipart/form-data 方式上传文件");
+    }
+
+    private String describeIntegrity(String cause) {
+        if (cause == null) {
+            return "数据不完整或违反约束，请检查必填项";
+        }
+        if (cause.contains("doesn't have a default value")) {
+            Matcher m = COLUMN_PATTERN.matcher(cause);
+            return m.find() ? "缺少必填字段：" + m.group(1) : "缺少必填字段";
+        }
+        if (cause.contains("Data too long")) {
+            Matcher m = COLUMN_PATTERN.matcher(cause);
+            return m.find() ? "字段内容超长：" + m.group(1) : "字段内容超长";
+        }
+        if (cause.contains("Duplicate entry")) {
+            return "数据已存在，请勿重复提交";
+        }
+        return "数据不完整或违反约束，请检查必填项";
     }
 
     @ExceptionHandler(Exception.class)

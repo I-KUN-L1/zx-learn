@@ -22,21 +22,27 @@
 ## 快速开始
 
 ```bash
-# 1. 安装依赖（Node >= 18，推荐 pnpm 11）
-pnpm install
+# 1. 安装依赖（Node >= 18；pnpm / npm 二选一）
+pnpm install      # 或：npm install
 
 # 2a. Mock 演示模式（无需后端，内置演示数据 + 模拟 SSE 流式输出）
-pnpm dev:mock
+pnpm dev:mock     # 未装 pnpm 时用：npm run dev:mock
 
 # 2b. 联调模式（对接本地后端网关）
-pnpm dev
+pnpm dev          # 未装 pnpm 时用：npm run dev
 
 # 3. 生产构建 / 预览 / 质量检查
-pnpm build       # vite build
-pnpm typecheck   # vue-tsc --noEmit
-pnpm lint        # eslint --fix
-pnpm format      # prettier
+pnpm build        # vite build        （npm run build）
+pnpm typecheck    # vue-tsc --noEmit  （npm run typecheck）
+pnpm lint         # eslint --fix      （npm run lint）
+pnpm format       # prettier          （npm run format）
 ```
+
+启动成功后控制台会打印 `VITE vX.X.X ready in xxx ms` 与 `Local: http://localhost:5173/`，
+**必须用浏览器访问这个 `Local:` 地址**。
+
+> ⚠️ 不要用 `file://` 直接打开 `index.html` / `dist/index.html`：项目使用原生 ESM 与
+> `/src`、`/assets` 绝对路径，脱离 HTTP 服务后脚本会被浏览器拦截，页面必然**全白**。
 
 Mock 模式演示账号：手机号 `13800000001`，密码任意（≥6 位；初始密码 `admin123` 时会触发首次登录强制改密流程演示）。
 

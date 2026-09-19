@@ -17,11 +17,26 @@ import type {
   UserCouponVO,
 } from '@/types/api'
 
-/** 封面图（SDXL 文生图） */
+/** 本地静态封面池（与 zx-web/public/covers/ 下的文件一一对应） */
+const COVER_FILES = Array.from(
+  { length: 13 },
+  (_, i) => `/covers/course-${String(i + 1).padStart(2, '0')}.svg`,
+)
+
+/**
+ * 封面图地址（按 prompt 稳定映射到本地静态封面）。
+ *
+ * ⚠ 历史缺陷：最早这里返回的是 `trae-api-cn.mchost.guru` 的文生图接口
+ * （`/api/ide/v1/text_to_image`）。那是「按需生成」的服务端点，不是静态图片资源，
+ * 现已返回 **HTTP 404**，于是所有 mock 课程封面全部裂图（还被 CourseCover 的渐变兜底
+ * 掩盖住，不易察觉）。改为本地静态资源：不依赖外网、离线可跑，同一 prompt 永远同一张封面。
+ */
 export function cover(prompt: string): string {
-  return `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent(
-    prompt
-  )}&image_size=landscape_4_3`
+  let hash = 0
+  for (let i = 0; i < prompt.length; i += 1) {
+    hash = (hash * 31 + prompt.charCodeAt(i)) % 9973
+  }
+  return COVER_FILES[hash % COVER_FILES.length]
 }
 
 /** 课程分类（两级） */
@@ -529,10 +544,10 @@ export const mockLessons: LearningLessonVO[] = [
 
 /** 学习记录时间线 */
 export const mockLearningRecords: LearningRecordVO[] = [
-  { id: 1, userId: 1, lessonId: 1, sectionId: 121, sectionName: '2.2 虚拟线程实战', courseName: 'Java 21 核心技术', moment: 1260, finished: true, updateTime: '2026-09-05 21:30:00' },
-  { id: 2, userId: 1, lessonId: 2, sectionId: 511, sectionName: '1.1 基础类型与推断', courseName: 'TypeScript 从入门到实战', moment: 720, finished: false, updateTime: '2026-09-05 20:10:00' },
-  { id: 3, userId: 1, lessonId: 3, sectionId: 1011, sectionName: '1.1 双指针与滑动窗口', courseName: '大厂面试冲刺', moment: 1980, finished: true, updateTime: '2026-09-04 22:05:00' },
-  { id: 4, userId: 1, lessonId: 1, sectionId: 122, sectionName: '2.3 锁与并发容器', courseName: 'Java 21 核心技术', moment: 540, finished: false, updateTime: '2026-09-04 19:40:00' },
+  { id: 1, userId: 1, courseId: 1, lessonId: 1, sectionId: 121, sectionName: '2.2 虚拟线程实战', courseName: 'Java 21 核心技术', moment: 1260, finished: true, updateTime: '2026-09-05 21:30:00' },
+  { id: 2, userId: 1, courseId: 5, lessonId: 2, sectionId: 511, sectionName: '1.1 基础类型与推断', courseName: 'TypeScript 从入门到实战', moment: 720, finished: false, updateTime: '2026-09-05 20:10:00' },
+  { id: 3, userId: 1, courseId: 10, lessonId: 3, sectionId: 1011, sectionName: '1.1 双指针与滑动窗口', courseName: '大厂面试冲刺', moment: 1980, finished: true, updateTime: '2026-09-04 22:05:00' },
+  { id: 4, userId: 1, courseId: 1, lessonId: 1, sectionId: 122, sectionName: '2.3 锁与并发容器', courseName: 'Java 21 核心技术', moment: 540, finished: false, updateTime: '2026-09-04 19:40:00' },
 ]
 
 /** 笔记 */

@@ -1,0 +1,94 @@
+=====================================================================
+知行智学 ZhiXing Learn · 五大模块端到端验证报告
+生成时间: 2026-09-18 18:41:42
+网关地址: http://localhost:8080
+=====================================================================
+  [INFO] REUSE=1：复用已运行的服务（跳过启动与关停）
+
+=== 一、环境与构建产物 ===
+  [PASS] zx-user fat jar 存在
+  [PASS] zx-course fat jar 存在
+  [PASS] zx-auth fat jar 存在
+  [PASS] zx-exam fat jar 存在
+  [PASS] zx-learning fat jar 存在
+  [PASS] zx-gateway fat jar 存在
+  [PASS] 前端构建产物 dist/index.html 存在
+
+=== 一之二、服务就绪检查（复用模式）===
+  [PASS] zx-user 已在运行 (8082)
+  [PASS] zx-course 已在运行 (8083)
+  [PASS] zx-auth 已在运行 (8081)
+  [PASS] zx-learning 已在运行 (8086)
+  [PASS] zx-exam 已在运行 (8084)
+  [PASS] zx-gateway 已在运行 (8080)
+
+=== 二、登录与鉴权 ===
+  [PASS] 学员登录 13900000001/123456
+  [PASS] 管理员登录 13800000001/123456
+  [PASS] 未携带 token 访问 /points/summary 被拒
+
+=== 三、个人中心与积分中心（需求 1）===
+  [PASS] GET /points/summary 返回 200
+  [PASS] GET /points/records/page 返回 200
+  [PASS] GET /points/rank 返回 200
+  [PASS] 积分总额 = 本人明细求和（summary ↔ records 自洽）
+  [PASS] summary.recordCount = 明细总数（summary ↔ records 自洽）
+  [PASS] summary.rank = 排行榜 me.rank（summary ↔ rank 自洽）
+  [PASS] 榜单含本人条目(me) 且 userId=2001
+  [PASS] 排行榜按积分降序排列
+  [PASS] 排行榜条数 = min(10, 参与积分人数)
+  [PASS] 参与积分人数 ≥ 8（演示学员基数）
+  [PASS] 本人排名落在 1..参与人数 区间
+  [PASS] 明细首条含来源文案
+  [PASS] 提交测验（答对 1 题）返回 200
+  [PASS] 测验判分：答对
+  [PASS] 完成测验后积分自动 +5（实际 704 → 709）
+  [PASS] 发布讨论话题返回 200
+  [PASS] 发布讨论后积分自动 +5（实际 709 → 714）
+  [PASS] 回复讨论返回 200
+  [PASS] 回复讨论后积分自动 +2（实际 714 → 716）
+  [PASS] 外部经网关调用内部加分接口被拒(403)
+  [PASS] GET /boards/page 返回 200
+  [PASS] GET /boards/7001 返回 200
+  [PASS] 话题 7001 含 2 条回复
+
+=== 四、我的课表与课程内容页（需求 2）===
+  [PASS] GET /lessons/page 返回 200
+  [PASS] 课表条目数 > 0
+  [PASS] GET /courses/3001 返回 200
+  [PASS] 课程返回两级目录：根节点 2 章
+  [PASS] 首章含 2 个小节(sections)
+  [PASS] 小节带可播放媒资标识(trailer/duration)
+  [PASS] 学员已拥有的课程 3002 课表可查
+  [PASS] 内部接口 /course/3001/catalogues 对外被拒(403)
+
+=== 五、重置密码（需求 3）===
+  [PASS] 管理员重置密码接口不再报环境变量缺失(200)
+  [PASS] 重置响应不含 ZX_USER_DEFAULT_PASSWORD 报错
+  [PASS] 被重置账号可用统一密码 123456 登录
+
+=== 六、账号状态管理（需求 4）===
+  [PASS] 管理员禁用账号 2102 返回 200
+  [PASS] 被禁用账号登录被拦截(业务码 423)
+  [PASS] 禁用登录提示含「管理员」字样: 该账号已被禁用，请联系管理员
+  [PASS] 管理员启用账号 2102 返回 200
+  [PASS] 启用后账号恢复可登录
+  [PASS] 学员调用状态修改接口被拒(403)
+  [INFO] 管理员禁用自己 → code=1001 msg=不能禁用当前登录账号
+
+=== 七、前端样式与自适应（需求 5）===
+  [PASS] 前端样式产物存在（54 个 CSS 文件）
+  [PASS] 产物 CSS 含图表/溢出兜底类 zx-chart-box（index-D2ZdbOr1.css）
+  [PASS] 产物 CSS 含自适应/溢出约束规则（命中 23 个文件）
+  [PASS] 课程内容页已打包进产物
+  [PASS] 个人中心页已打包进产物
+  [PASS] 全局样式表已定义图表容器兜底类 zx-chart-box
+
+=== 八、汇总 ===
+  断言总数: 62   通过: 62   失败: 0
+  结论: 全部通过 ✅
+
+---------------------------------------------------------------------
+原始响应报文目录: logs/e2e-modules/
+服务启动日志目录: logs/e2e-modules/svc-*.log
+---------------------------------------------------------------------

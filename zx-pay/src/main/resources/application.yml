@@ -17,6 +17,11 @@ spring:
       - optional:file:../.env[.properties]
   application:
     name: pay-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/zx_pay?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -25,7 +30,16 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
-        enabled: false
+        # 关闭 Nacos 时靠各服务下方的 static simple.instances 直连；生产置 NACOS_ENABLED=true 并指向注册中心
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: ${NACOS_ENABLED:false}
       config:
-        enabled: false
+        enabled: ${NACOS_CONFIG_ENABLED:false}
+
+# 支付回调验签：与 zx-trade 的 pay.callback-secret 共用同一环境变量 PAY_CALLBACK_SECRET，
+# 确保"下单侧生成签名"与"渠道回调侧校验签名"两端用同一密钥。
+# 未配置 → /notify/** 一律 fail-closed 拒绝（501），绝不"裸奔放行"。
+# 本地联调可用 openssl rand -hex 32 生成；生产由支付渠道下发。
+pay:
+  notify:
+    secret: ${PAY_CALLBACK_SECRET:}

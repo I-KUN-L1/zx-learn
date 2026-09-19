@@ -18,8 +18,10 @@ async function fetchMessages() {
   try {
     messages.value = await inboxList()
     appStore.unreadCount = unreadCount.value
-  } catch {
-    /* ignore */
+  } catch (e) {
+    // 不允许静默吞错：拉取失败必须让用户看见，否则页面表现为「暂无消息」，会被误判为「没有消息」
+    ElMessage.error('消息加载失败，请稍后重试')
+    console.error('[messages] inboxList failed', e)
   } finally {
     loading.value = false
   }
@@ -31,8 +33,11 @@ async function onRead(m: InboxVO) {
     await readInbox(m.id)
     m.read = true
     appStore.unreadCount = unreadCount.value
-  } catch {
-    /* ignore */
+  } catch (e) {
+    // 历史缺陷：这里曾是空 catch，而 /inboxes/read 在真实后端并不存在 →
+    // 点击无任何反馈、未读角标也不消失，故障被完全掩盖。现在显式提示。
+    ElMessage.error('标记已读失败，请稍后重试')
+    console.error('[messages] readInbox failed', e)
   }
 }
 
@@ -42,8 +47,9 @@ async function onReadAll() {
     messages.value.forEach((m) => (m.read = true))
     appStore.unreadCount = 0
     ElMessage.success('已全部标记为已读')
-  } catch {
-    /* ignore */
+  } catch (e) {
+    ElMessage.error('操作失败，请稍后重试')
+    console.error('[messages] readAllInbox failed', e)
   }
 }
 

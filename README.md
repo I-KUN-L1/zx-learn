@@ -71,6 +71,7 @@ curl -N -X POST http://localhost:8080/chat \
 | 🔐 **JWT 网关统一鉴权** | 双 Token（access + refresh），网关全局过滤器校验 + user-info 透传，RBAC 权限模型 |
 | 📦 **草稿-正式双表** | 课程编辑态与发布态解耦，上架原子校验，发布次数统计 |
 | 🔄 **"知-学-行-评"闭环** | 知（课程内容）→ 学（学习记录/课表）→ 行（练习/笔记/交易）→ 评（学情报告/能力画像/学习路径） |
+| 📚 **文档体系完整** | 架构图 / 接口参考 / 数据库设计 / 部署指南 / 演进路线 一应俱全 |
 | 🔒 **凭据外部化** | 数据库/Redis 密码、JWT 密钥全部通过环境变量注入（见 `.env.example`），仓库零硬编码密钥 |
 
 ## 🏁 已完成里程碑
@@ -217,7 +218,16 @@ mvn clean install -DskipTests
 
 ### 5. 启动后端
 
-**① 启动服务**（在仓库根目录执行，每个 `mvn spring-boot:run` 占一个终端；最小链路按此顺序）：
+**⓪ 一键启动（推荐，Git Bash / PowerShell）**：脚本已内置端口注入防护（清除宿主注入的 `SERVER__PORT`/`SERVER__HOST`），可避免"应用启动却因端口冲突失败"。
+
+```bash
+bash scripts/dev-start-backend.sh                                   # 全量 16 服务
+bash scripts/dev-start-backend.sh zx-user zx-course zx-auth zx-gateway   # 仅最小链路
+# PowerShell（Windows）：
+# powershell -ExecutionPolicy Bypass -File scripts\dev-start-backend.ps1
+```
+
+**① 手动启动服务**（在仓库根目录执行，每个 `mvn spring-boot:run` 占一个终端；最小链路按此顺序）：
 
 ```bash
 mvn -pl zx-user spring-boot:run      # 8082
@@ -240,14 +250,25 @@ mvn -pl zx-insight spring-boot:run   # 8095（可选，学情报告）
 
 ```bash
 cd zx-web
-pnpm install   # 或 npm install（要求 Node.js ≥ 18，推荐 pnpm）
-pnpm dev       # 开发模式：http://localhost:5173
+
+# 安装依赖（Node.js ≥ 18；pnpm / npm 二选一）
+pnpm install        # 或：npm install
+
+# 启动开发服务器（二选一，效果相同）
+pnpm dev            # 已装 pnpm 时
+npm run dev         # 未装 pnpm 时（npm 自带，直接可用）
+
+# 控制台出现 VITE vX.X.X ready + Local: http://localhost:5173/ 才算启动成功
 ```
+
+> ⚠️ **不要用浏览器直接打开 `zx-web/index.html` 或 `zx-web/dist/index.html`（`file://` 方式）**
+> —— 这些文件必须由 Vite / Nginx 这类 HTTP 服务托管，`file://` 下浏览器会拦截 ESM 模块与
+> `/src`、`/assets` 绝对路径，页面必然**全白**。必须访问 `http://localhost:5173`。
 
 - 开发模式自动将 `/api` 请求代理到网关 `http://localhost:8080`（可用 `zx-web/.env.development` 中的 `VITE_PROXY_TARGET` 修改，适配非默认网关端口）
 - 5173 端口被占用时 Vite 会自动顺延到 5174，以控制台输出的 `Local: http://localhost:PORT` 为准
-- **Mock 演示模式**：`pnpm dev:mock`——无需任何后端，内置演示数据与模拟 SSE 流式输出，适合快速预览页面
-- 生产构建：`pnpm build`（产物在 `zx-web/dist`），本地预览构建结果 `pnpm preview`
+- **Mock 演示模式**：`pnpm dev:mock`（或 `npm run dev:mock`）——无需任何后端，内置演示数据与模拟 SSE 流式输出，适合快速预览页面
+- 生产构建：`pnpm build`（或 `npm run build`，产物在 `zx-web/dist`），本地预览构建结果 `pnpm preview`
 - 更多前端细节见 [zx-web/README.md](zx-web/README.md)
 
 ### 7. 验证
@@ -371,10 +392,12 @@ mvn test
 | **未配置 LLM 的 API Key 能跑吗？** | 能。`ZX_LLM_ENABLED` 默认 `false`，`zx-aigc` 自动返回**模拟流式回复**（按真实格式带 `END` 事件），可运行、可演示、可压测。接入真实模型时在 `.env` 配 `ZX_LLM_BASE_URL / ZX_LLM_API_KEY / ZX_LLM_MODEL` 并置 `ZX_LLM_ENABLED=true`（DeepSeek 等任何 OpenAI 兼容接口均可） |
 | **没装 Redis 行不行？** | 服务照常启动：AI 会话记忆（`ChatMemory`）在 Redis 不可用时**自动降级为无记忆模式**，对话主流程可用（仅记忆/缓存相关能力缺失）。推荐 `docker compose up -d redis` 一键补齐 |
 | **端口冲突如何修改？** | 启动参数覆盖：`java -jar zx-course.jar --server.port=18083`；或改该服务 `application.yml` 的 `server.port`。注意：本地直连模式下其他服务的静态实例地址需同步更新 |
+| **启动报 `Identify and stop the process that's listening on port xxxxx`（端口被占，且 xxxxx 不是 8080~8095）？** | 宿主/IDE 终端向子进程注入了环境变量 `SERVER__PORT` / `SERVER__HOST`，Spring 松散绑定把它当作 `server.port`，**优先级高于 `application.yml`**，导致所有服务都去抢同一个端口。解决：启动前清除这两个变量，推荐直接用 `bash scripts/dev-start-backend.sh`（Git Bash）或 `scripts\dev-start-backend.ps1`（PowerShell），脚本已自动 `unset SERVER__PORT SERVER__HOST` 并把 `java.io.tmpdir` 指向可写目录。手动方式：`env -u SERVER__PORT -u SERVER__HOST mvn -pl zx-user spring-boot:run` |
 | **本机已装 MySQL，`docker compose up` 报 3306 被占？** | 在 `.env` 中取消注释并修改 `MYSQL_BIND_PORT=13306`（compose 将容器映射到宿主机空闲端口），应用侧通过 `MYSQL_PORT` 指定实际端口即可 |
 | **MySQL 版本有要求吗？** | **MySQL 8.x**（utf8mb4 字符集）。不保证兼容 5.7 —— 连接驱动、SQL 方言均按 8.x 设计，低版本不排查兼容问题 |
 | **启动报 `Could not resolve placeholder 'MYSQL_PASSWORD'`？** | 服务没找到 `.env` 文件。确认仓库根目录存在 `.env`（第 2 步），并从根目录（或一级子目录内）启动服务；`spring.config.import` 按 `./.env` → `../.env` 顺序查找 |
 | **前端打开后接口报错 / 一直提示登录？** | Vite 将 `/api` 代理到 `http://localhost:8080` 网关——确认最小链路 4 个服务（gateway/auth/user/course）均已启动；网关端口非 8080 时改 `zx-web/.env.development` 的 `VITE_PROXY_TARGET` 后重启 Vite |
+| **前端页面全白、什么都没有？** | 99% 是**打开方式不对**，不是代码问题：① 必须访问 `http://localhost:5173`（Vite 输出 `Local:` 的那个地址），**不要双击/拖拽打开 `index.html` 或 `dist/index.html`**（`file://` 下 ESM 模块与绝对路径 `/src`、`/assets` 会被浏览器拦截，必然白屏）；② 确认 Vite 真的在跑（控制台有 `ready in xxx ms`，或 `netstat -ano \| findstr 5173`）；③ 本机若未安装 pnpm，把 `pnpm dev` 换成 `npm run dev`；④ 只想先看页面不启后端：`npm run dev:mock` |
 | **前端端口 / 代理如何修改？** | 端口被占时 Vite 自动顺延（5174），以控制台 `Local:` 输出为准；代理目标改 `zx-web/.env.development` 中 `VITE_PROXY_TARGET`；只想看页面不启后端用 `pnpm dev:mock` |
 | **最小启动链路是什么？** | 只起 4 个服务即可跑通「登录 → 浏览课程」：`zx-user(8082) → zx-course(8083) → zx-auth(8081) → zx-gateway(8080)`，基础设施只需 MySQL + Redis。AI 助教加 `zx-aigc(8089)`，学情报告加 `zx-insight(8095)`，其余服务按需启动 |
 | **JDK 17 能运行吗？** | 不能。项目统一 **Java 21**（`maven.compiler.release=21`，且启用虚拟线程），CI 同样以 JDK 21 构建验证；请安装 JDK 21+ |

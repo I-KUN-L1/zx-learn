@@ -75,6 +75,15 @@ public class InsightController {
     }
 
     /**
+     * 教师端：查看指定学员的能力画像（教师/管理员可用，学员间不可互查）
+     */
+    @GetMapping("/teacher/students/{userId}")
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
+    public R<ProfileVO> studentProfile(@PathVariable Long userId) {
+        return R.ok(reportService.profile(userId));
+    }
+
+    /**
      * 个性化学习路径推荐
      */
     @GetMapping("/learning-path")

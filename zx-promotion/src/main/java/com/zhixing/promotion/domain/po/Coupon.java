@@ -18,7 +18,7 @@ public class Coupon extends BasePO {
     /** 名称 */
     private String name;
 
-    /** 类型：1-满减 */
+    /** 类型：1-普通（满减） 2-秒杀 */
     private Integer type;
 
     /** 面值（分） */

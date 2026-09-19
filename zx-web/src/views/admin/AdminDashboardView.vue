@@ -128,30 +128,30 @@ onMounted(async () => {
 
     <!-- 指标卡 -->
     <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-      <div v-for="m in metrics" :key="m.label" class="zx-card flex items-center gap-4 p-5">
-        <div class="flex h-12 w-12 items-center justify-center rounded-xl" :style="{ background: m.bg }">
+      <div v-for="m in metrics" :key="m.label" class="zx-card flex items-center gap-4 overflow-hidden p-5">
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" :style="{ background: m.bg }">
           <el-icon :size="24" color="#4F46E5"><component :is="m.icon" /></el-icon>
         </div>
-        <div>
+        <div class="min-w-0">
           <div class="zx-text-secondary text-sm">{{ m.label }}</div>
-          <div class="text-2xl font-extrabold">{{ m.value }}</div>
+          <div class="truncate text-2xl font-extrabold">{{ m.value }}</div>
         </div>
       </div>
     </div>
 
     <!-- 图表 -->
     <div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-      <div class="zx-card p-5 xl:col-span-2">
+      <div class="zx-card overflow-hidden p-5 xl:col-span-2">
         <h2 class="font-bold">订单量与销售额（近 7 日）</h2>
-        <div ref="orderEl" class="mt-2 h-[320px] w-full" />
+        <div ref="orderEl" class="zx-chart-box mt-2 h-[320px]" />
       </div>
-      <div class="zx-card p-5">
+      <div class="zx-card overflow-hidden p-5">
         <h2 class="font-bold">活跃趋势（近 7 日）</h2>
-        <div ref="activeEl" class="mt-2 h-[300px] w-full" />
+        <div ref="activeEl" class="zx-chart-box mt-2 h-[300px]" />
       </div>
-      <div class="zx-card p-5">
+      <div class="zx-card overflow-hidden p-5">
         <h2 class="font-bold">热门课程 TOP5</h2>
-        <div ref="hotEl" class="mt-2 h-[300px] w-full" />
+        <div ref="hotEl" class="zx-chart-box mt-2 h-[300px]" />
       </div>
     </div>
   </div>

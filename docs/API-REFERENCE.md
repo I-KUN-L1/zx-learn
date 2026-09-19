@@ -31,17 +31,41 @@
 
 ## 3. 课程服务（course · 8083）
 
+### 3.1 课程管理（/courses）
+
+| 方法 | 路径 | 说明 | 角色 |
+|---|---|---|---|
+| GET | /courses/page | 课程分页（正式表 `course`；匿名只返回已上架） | 公开 |
+| GET | /courses/{id} | 课程详情（含两级目录） | 公开 |
+| GET | /courses/baseInfo/{id} | 草稿编辑态（含 `catalogueList`） | 员工/教师 |
+| POST | /courses/baseInfo/save | 保存课程基本信息到**草稿表**（返回草稿 id） | 员工/教师 |
+| GET | /courses/draft/page | **草稿箱分页**（`course_draft`，`submitted=0`） | 员工/教师 |
+| DELETE | /courses/draft/{id} | 删除草稿（仅未发布的草稿） | 员工/教师 |
+| GET | /courses/checkBeforeUpShelf/{id} | 上架前完整性校验（草稿 id） | 员工/教师 |
+| POST | /courses/upShelf | 上架（入参 `{id: 草稿id}`，草稿→正式 + 同步目录） | 员工/教师 |
+| POST | /courses/downShelf | 下架（入参 `{id: 课程id}`） | 员工/教师 |
+| DELETE | /courses/delete/{id} | 删除正式课程 | 员工 |
+| GET | /courses/checkName | 课程名称唯一性校验 | 员工/教师 |
+
+> ⚠ 草稿箱与已发布是**两张表**：草稿箱走 `/courses/draft/page`（`course_draft`），
+> 已发布走 `/courses/page`（`course`）。**不要**用 `/courses/page?status=2` 取草稿——
+> `course.status` 只有 `1-上架 / 0-下架`，这样查恒为空。
+
+### 3.2 分类与目录
+
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | /courses | 保存课程草稿 |
-| GET | /courses/{id} | 查询课程详情（含目录） |
-| PUT | /courses/{id}/up | 上架（草稿→正式） |
-| PUT | /courses/{id}/down | 下架 |
-| DELETE | /courses/{id} | 删除课程 |
-| GET | /courses/page | 课程分页 |
-| GET | /courses/name/check | 名称唯一性校验 |
-| GET | /categorys/tree | 分类树 |
-| GET | /catalogues | 课程目录 |
+| GET | /categorys/all | 全部分类（前端组装树） |
+| GET | /categorys/list | 分类分页 |
+| GET | /categorys/{id} | 分类详情 |
+| GET | /categorys/getAllOfOneLevel | 全部一级分类 |
+| GET | /catalogues/course/{courseId} | 某课程的全部目录 |
+| GET | /catalogues/querySectionInfoById/{id} | 小节详情（含讲义/要点/资料） |
+| GET | /catalogues/batchQuery | 目录批量查询 |
+| GET | /course/{id}/searchInfo | 课程检索信息 |
+| GET | /course/name | 按名称查课程 id |
+| GET | /course/all | 全部已上架课程精简信息 |
+| GET | /course/{id}/catalogues | 课程目录（精简） |
 
 ## 4. AI 助教（aigc · 8089）
 

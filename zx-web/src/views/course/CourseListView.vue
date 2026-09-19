@@ -3,12 +3,21 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { getCategoryAll, pageCourses } from '@/api/course'
+import { useOwnedCourses } from '@/composables/useOwnedCourses'
+import { useUserStore } from '@/stores/user'
 import CourseCard from '@/components/course/CourseCard.vue'
 import SkeletonCards from '@/components/common/SkeletonCards.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import type { Category, CourseVO } from '@/types/api'
 
 const route = useRoute()
+const userStore = useUserStore()
+
+/**
+ * 已拥有课程集合：与「我的课表」共用同一数据源（useOwnedCourses 全局单例），
+ * 因此课程列表的「已拥有」角标与我的课表始终一致。
+ */
+const { ownedIds, refresh: refreshOwned } = useOwnedCourses()
 
 /* ---------- 分类树 ---------- */
 const categories = ref<Category[]>([])
@@ -94,10 +103,18 @@ watch(
   }
 )
 
+// 登录态变化（登录 / 退出 / 切换账号）后强制重拉，避免沿用上一个账号的已拥有状态
+watch(
+  () => userStore.userId,
+  () => refreshOwned(true)
+)
+
 onMounted(async () => {
   getCategoryAll()
     .then((res) => (categories.value = res))
     .catch(() => undefined)
+  // 拉取「我的课表」已拥有课程集合（内部已按角色/登录态判断，失败静默不影响渲染）
+  refreshOwned()
   fetchCourses()
 })
 </script>
@@ -157,7 +174,7 @@ onMounted(async () => {
               :type="query.sortBy === '' ? 'primary' : ''"
               @click="onSort('')"
             >
-              默认
+              最新
             </el-button>
             <el-button size="small" round :type="query.sortBy === 'enrollNum' ? 'primary' : ''" @click="onSort('enrollNum')">
               学习人数
@@ -177,7 +194,12 @@ onMounted(async () => {
             <el-button type="primary" round @click="onSelectCategory('')">查看全部课程</el-button>
           </EmptyState>
           <div v-else class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            <CourseCard v-for="c in courses" :key="c.id" :course="c" />
+            <CourseCard
+              v-for="c in courses"
+              :key="c.id"
+              :course="c"
+              :owned="ownedIds.has(String(c.id))"
+            />
           </div>
         </div>
 

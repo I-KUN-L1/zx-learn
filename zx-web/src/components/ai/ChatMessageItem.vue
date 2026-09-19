@@ -47,6 +47,13 @@ const courseRefs = computed(() =>
       >
         <!-- 用户消息 -->
         <span v-if="isUser" class="whitespace-pre-wrap">{{ message.content }}</span>
+        <!-- AI 等待首字：思考中动画（点循环出现/消失） -->
+        <div v-else-if="streaming && !message.content" class="zx-thinking" aria-label="思考中">
+          <span class="zx-thinking__text">思考中</span>
+          <span class="zx-thinking__dots" aria-hidden="true">
+            <i class="zx-dot" /><i class="zx-dot" /><i class="zx-dot" />
+          </span>
+        </div>
         <!-- AI 消息：Markdown + 流式光标 -->
         <div v-else class="zx-markdown" :class="{ 'zx-cursor': streaming }" v-html="html" />
       </div>
@@ -88,5 +95,49 @@ const courseRefs = computed(() =>
   border-top-left-radius: 4px;
   display: inline-block;
   min-width: 200px;
+}
+
+/* 思考中动画：文字 + 三个点依次循环出现/消失 */
+.zx-thinking {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  color: var(--zx-text-secondary);
+}
+.zx-thinking__text {
+  font-size: 13px;
+}
+.zx-thinking__dots {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-left: 2px;
+  height: 14px;
+}
+.zx-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--zx-primary);
+  opacity: 0;
+  animation: zx-dot-blink 1.4s ease-in-out infinite;
+}
+.zx-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.zx-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes zx-dot-blink {
+  0%,
+  60%,
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 </style>

@@ -2,6 +2,7 @@ package com.zhixing.promotion.controller;
 
 import com.zhixing.promotion.domain.dto.CouponFormDTO;
 import com.zhixing.promotion.domain.po.Coupon;
+import com.zhixing.promotion.domain.vo.CouponVO;
 import com.zhixing.promotion.service.CouponService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,9 +51,13 @@ class CouponControllerTest {
         Coupon coupon = new Coupon();
         coupon.setId(1L);
         coupon.setName("新人券");
+        CouponVO vo = new CouponVO();
+        vo.setId(1L);
+        vo.setName("新人券");
         when(couponService.getById(1L)).thenReturn(coupon);
+        when(couponService.toVO(coupon)).thenReturn(vo);
 
-        Coupon got = controller.getById(1L).getData();
+        CouponVO got = controller.getById(1L).getData();
 
         assertEquals(1L, got.getId());
         assertEquals("新人券", got.getName());

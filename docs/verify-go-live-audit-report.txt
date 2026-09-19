@@ -1,0 +1,61 @@
+=====================================================================
+知行智学 · 上线前审查修复项回归验证报告
+生成时间: 2026-09-17 20:07:35
+=====================================================================
+
+=== A. RAG / Embedding 链路（曾恒定静默降级为伪向量）===
+  [PASS] A1 EmbeddingService 不再写死 /v1/embeddings 路径
+  [PASS] A1 EmbeddingService 使用可配置的 embeddingUri()
+  [PASS] A1 LlmProperties 暴露 embeddingPath 配置项
+  [PASS] A2 application.yml 提供 ZX_LLM_EMBEDDING_PATH 覆盖点
+  [PASS] A2 .env.example 已说明 embedding-path 与 base-url 的配套关系
+  [PASS] A2 降级日志可见（不再静默：ERROR 一次 + 指向配置项）
+  [INFO] 维度三方核对：.env=1024 / deploy/pgvector/init.sql=1024
+  [PASS] A3 .env 的 embedding 维度 = pgvector 建表维度
+  [PASS] A4 向量维度未超过 HNSW 对 vector 类型的 2000 维上限
+  [PASS] A3 运行库 knowledge_chunk.embedding 维度与配置一致
+
+=== B. 课程名额计数（曾只增不减 → 名额虚占）===
+  [PASS] B1 confirm 容错分支归还占位（releaseLockedCount）
+  [PASS] B1 locked_count 递减逻辑集中在单一私有方法
+  [PASS] B1 单测覆盖「容错确认不泄漏 locked_count」
+  [PASS] B2 修复迁移已登记进 db-migrate.sh
+  [PASS] B2 修复迁移文件存在
+  [PASS] B3 库内 locked_count 漂移课程数 = 0
+  [PASS] B4 reconcile.sql 断言项命中行数 = 0
+
+=== C. 跨服务调用（题库课程名曾恒为「课程 #<id>」占位）===
+  [PASS] C1 zx-exam 声明 course-service 静态实例
+
+=== D. 越权面（任意登录学员可读管理端知识库接口）===
+  [PASS] D1 KnowledgeController 的 search 已加 @RequireRole
+
+=== E. 部署链路（前端 /api 前缀剥离）===
+  [PASS] E1 zx-web/nginx.conf 存在
+  [PASS] E1 nginx 反代到网关时剥离 /api 前缀（proxy_pass 以 / 结尾）
+  [PASS] E1 nginx 为 SSE（AI 流式对话）关闭了缓冲
+  [PASS] E1 SPA 路由回落 index.html
+  [PASS] E2 编排含 zx-web 站点服务
+  [PASS] E2 前端镜像构建上下文为 ./zx-web
+  [PASS] E2 前端 Dockerfile 存在
+  [PASS] E3 前端生产配置使用 /api（与 nginx 剥离规则配套）
+
+=== 运行态断言（网关 :8080）===
+  [FAIL] D1 学员访问 /admin/knowledge/search → 业务码 403  <期望=ok 实际=code:200>
+  [FAIL] D1 学员访问 /admin/knowledge/preview → 业务码 403  <期望=ok 实际=code:200>
+  [PASS] D1 匿名访问 /admin/knowledge/search → 网关 401
+  [PASS] D1 教师访问 /admin/knowledge/search → 业务码 200（未误伤教师）
+  [PASS] C2 题库列表返回 200
+  [PASS] C2 题库 courseName 无「课程 #id」占位（跨服务调用已生效）
+
+=== F. 密钥基线（观察项，不计入失败）===
+  [INFO] F ZX_JWT_SECRET 仍是**开发占位值**，上线前必须替换（详见 docs/GO-LIVE-CHECKLIST.md B 组）
+  [INFO] F PAY_CALLBACK_SECRET 仍是**开发占位值**，上线前必须替换（详见 docs/GO-LIVE-CHECKLIST.md B 组）
+  [INFO] F MYSQL_PASSWORD 仍是**开发占位值**，上线前必须替换（详见 docs/GO-LIVE-CHECKLIST.md B 组）
+  [INFO] F REDIS_PASSWORD 仍是**开发占位值**，上线前必须替换（详见 docs/GO-LIVE-CHECKLIST.md B 组）
+
+=====================================================================
+断言总数: 32   通过: 30   失败: 2
+结论: 存在 2 项失败 ❌
+原始报文目录: D:/1/zx-learn/logs/verify-go-live-audit
+=====================================================================

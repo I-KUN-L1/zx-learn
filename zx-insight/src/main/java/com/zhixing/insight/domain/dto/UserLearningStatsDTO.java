@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 用户学习统计数据（跨服务聚合结果）
@@ -39,4 +40,10 @@ public class UserLearningStatsDTO implements Serializable {
 
     /** 学习过的课程 id 列表 */
     private List<Long> courseIds;
+
+    /** 近 7 日每日学习时长（秒），key=yyyy-MM-dd（按最后学习时间归属日期） */
+    private Map<String, Long> dailyDurations;
+
+    /** 连续签到天数 */
+    private int signStreak;
 }

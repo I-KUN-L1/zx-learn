@@ -23,7 +23,8 @@ onMounted(() => {
 })
 
 const isSeckill = computed(() => props.coupon.type === 2)
-const notStarted = computed(() => props.coupon.status === 3 || startInSeconds > 0)
+/** 未开始：券模板状态 0（未开始）或距发放开始时间尚有剩余 */
+const notStarted = computed(() => props.coupon.status === 0 || startInSeconds > 0)
 const soldOut = computed(() => props.coupon.remainNum <= 0)
 /** 已抢进度百分比 */
 const progress = computed(() => {
@@ -136,11 +137,11 @@ async function onClaim() {
         type="primary"
         round
         :loading="claiming"
-        :disabled="soldOut || props.coupon.status === 2"
+        :disabled="soldOut || props.coupon.status === 2 || props.coupon.status === 3"
         :class="{ 'zx-seckill-btn': isSeckill && !soldOut }"
         @click="onClaim"
       >
-        {{ soldOut ? '已抢光' : notStarted ? '即将开始' : isSeckill ? '立即抢购' : props.coupon.status === 2 ? '暂停发放' : '立即领取' }}
+        {{ soldOut ? '已抢光' : notStarted ? '即将开始' : isSeckill ? '立即抢购' : '立即领取' }}
       </el-button>
     </div>
   </div>

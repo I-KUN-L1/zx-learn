@@ -1,0 +1,17 @@
+# zx-web 镜像构建上下文裁剪（构建上下文 = zx-web/）
+# 本地依赖与构建产物不进上下文，避免上传数百 MB
+node_modules
+dist
+.pnpm-store
+
+# 本地配置与残留
+.env.local
+*.log
+.vite
+coverage
+
+# IDE / 版本控制
+.git
+.gitignore
+.idea
+.vscode

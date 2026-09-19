@@ -2,3 +2,7 @@ node_modules/
 dist/
 .pnpm-store/
 *.local
+
+# vite 构建时在项目根生成的临时配置文件（每次 build 都会重建，不应入库）
+vite.config.ts.timestamp-*
+*.timestamp-*.mjs

@@ -6,6 +6,7 @@ import com.zhixing.api.dto.user.UserDTO;
 import com.zhixing.auth.common.util.JwtTool;
 import com.zhixing.auth.domain.vo.LoginResultVO;
 import com.zhixing.auth.mapper.LoginRecordMapper;
+import com.zhixing.common.exceptions.AccountDisabledException;
 import com.zhixing.common.exceptions.UnauthorizedException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
@@ -84,14 +85,18 @@ class AccountServiceTest {
     }
 
     @Test
-    void disabledUserThrows401() {
+    void disabledUserThrowsAccountDisabled() {
+        // 账号被禁用**不再是 401**：凭据错误才归 401（前端只提示"用户名或密码错误"），
+        // 禁用需要明确处置指引，故单列业务码 423，前端据此弹"请联系管理员"专属弹窗
+        // （见 zx-web/src/api/request.ts 的 ACCOUNT_DISABLED_CODE 与 utils/loginPrompt.ts）。
         UserDTO user = new UserDTO();
         user.setId(1L);
         user.setStatus(0);
         when(userClient.queryUserDetail(any(LoginFormDTO.class), anyBoolean())).thenReturn(user);
-        UnauthorizedException e = assertThrows(UnauthorizedException.class,
+        AccountDisabledException e = assertThrows(AccountDisabledException.class,
                 () -> accountService.login(form(), true, request));
-        assertEquals("账号已被禁用", e.getMessage());
+        assertEquals("该账号已被禁用，请联系管理员", e.getMessage());
+        assertEquals(423, e.getCode());
     }
 
     @Test

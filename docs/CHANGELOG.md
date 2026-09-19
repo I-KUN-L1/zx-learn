@@ -1,5 +1,6 @@
 # 知行智学（zx-learn）版本记录
 
+> 记录项目开发过程中的关键里程碑、问题修复与优化，便于工程复盘与演进追踪。
 
 ---
 
@@ -204,6 +205,7 @@
 - 完整实现核心链路：网关鉴权（JWT）→ 登录（auth + user）→ 课程（course）→ AI 助教（aigc）。
 - 提供 `zx-common` 统一响应 / 统一异常 / 链路追踪 / 分页等公共能力。
 - 10 个业务模块（exam/media/learning/trade/promotion/pay/search/remark/message/data）完成接口契约与骨架实现。
+- 完善文档体系：README、架构设计、接口参考、数据库设计、部署指南。
 
 > **影响面**：全部 Maven 模块（父 POM 统一管理）· zx-common / zx-api 公共底座 · zx-gateway / zx-auth / zx-user / zx-course / zx-aigc 核心链路 · docs 初版全套
 

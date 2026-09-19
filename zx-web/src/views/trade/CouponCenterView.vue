@@ -1,50 +1,69 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { claimCoupon, myCoupons, pageCoupons, seckillClaim, seckillResult } from '@/api/promotion'
+import { claimCoupon, pageCoupons, seckillClaim, seckillResult } from '@/api/promotion'
+import { useMyCoupons } from '@/composables/useMyCoupons'
 import { formatPrice } from '@/utils/format'
 import CouponList from '@/components/promotion/CouponList.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import type { CouponVO, UserCouponVO } from '@/types/api'
+import type { CouponVO } from '@/types/api'
+
+const router = useRouter()
+
+/** 我的优惠券：与「确认下单页选券」共用同一份全局状态，用券后两边实时联动 */
+const {
+  coupons: mine,
+  usableCoupons: usableMine,
+  claimedCouponIds: claimedIds,
+  refresh: refreshMine,
+} = useMyCoupons()
 
 const query = reactive({ pageNo: 1, pageSize: 12, type: '' as number | '' })
 const coupons = ref<CouponVO[]>([])
 const total = ref(0)
 const pages = ref(0)
 const loading = ref(true)
-const mine = ref<UserCouponVO[]>([])
-/** 正在领取中的 couponId */
-const claimingId = ref<number>(0)
+/** 正在领取中的 couponId（字符串化，兼容雪花 id） */
+const claimingId = ref('')
 
-/** 领取状态（本地映射：couponId -> 已领取） */
-const claimedIds = computed(() => new Set(mine.value.map((m) => m.couponId)))
+/**
+ * 已领取且"未使用"的券 id 集合（后端 status 语义：1 未使用 / 2 已使用 / 3 已过期）。
+ * 仅该集合中的券展示"去使用"按钮，已使用/已过期不展示。
+ */
+const usableIds = computed(
+  () => new Set(usableMine.value.map((m) => String(m.couponId))),
+)
 
 async function fetchCoupons() {
   loading.value = true
   try {
     const res = await pageCoupons({ ...query })
-    coupons.value = res.list
-    total.value = res.total
-    pages.value = res.pages
+    // 防御：接口异常结构（list 缺失）时回退空列表，避免 undefined 导致渲染崩溃
+    coupons.value = res?.list ?? []
+    total.value = res?.total ?? 0
+    pages.value = res?.pages ?? 0
   } catch {
-    /* ignore */
+    coupons.value = []
   } finally {
     loading.value = false
   }
 }
 
-async function fetchMine() {
-  try {
-    mine.value = await myCoupons()
-  } catch {
-    /* ignore */
-  }
+/** 拉取我的优惠券：每次进入页面都重新拉取，保证与后端权威状态一致（如刚下单用掉的券） */
+function fetchMine() {
+  return refreshMine(true)
+}
+
+/** 跳转课程界面使用优惠券 */
+function onUse() {
+  router.push('/courses')
 }
 
 /** 统一领取入口：type=2 走秒杀 + 结果轮询，其余走普通领券 */
 async function onClaim(c: CouponVO) {
   if (claimingId.value) return
-  claimingId.value = c.id
+  claimingId.value = String(c.id)
   try {
     if (c.type === 2) {
       // 秒杀：Lua 原子预扣 → MQ 异步落库 → 轮询结果（对齐后端真实链路）
@@ -78,7 +97,7 @@ async function onClaim(c: CouponVO) {
   } catch {
     /* 全局拦截器已提示 */
   } finally {
-    claimingId.value = 0
+    claimingId.value = ''
     await fetchMine()
   }
 }
@@ -107,9 +126,11 @@ onMounted(() => {
       :coupons="coupons"
       :loading="loading"
       :claimed-ids="claimedIds"
+      :usable-ids="usableIds"
       :claiming-id="claimingId"
       empty-text="暂无可领优惠券，敬请期待"
       @claim="onClaim"
+      @use="onUse"
     />
 
     <div v-if="pages > 1" class="mt-8 flex justify-center">
@@ -125,7 +146,12 @@ onMounted(() => {
 
     <!-- 我的优惠券 -->
     <section class="mt-12">
-      <h2 class="mb-4 text-xl font-bold">我的优惠券</h2>
+      <h2 class="mb-4 flex items-center gap-3 text-xl font-bold">
+        我的优惠券
+        <span class="zx-text-secondary text-sm font-normal">
+          可使用 {{ usableMine.length }} 张
+        </span>
+      </h2>
       <EmptyState v-if="!mine.length" description="还没有优惠券，去上面领取吧" size="small" />
       <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div
@@ -144,9 +170,15 @@ onMounted(() => {
             <div class="truncate text-sm font-medium">{{ c.couponName }}</div>
             <div class="zx-text-secondary mt-1 text-xs">{{ c.createTime }}</div>
           </div>
-          <el-tag :type="c.status === 1 ? 'primary' : c.status === 2 ? 'success' : 'info'" size="small" round>
-            {{ c.status === 1 ? '可使用' : c.status === 2 ? '已使用' : '已过期' }}
-          </el-tag>
+          <div class="flex shrink-0 flex-col items-end gap-2">
+            <el-tag :type="c.status === 1 ? 'primary' : c.status === 2 ? 'success' : 'info'" size="small" round>
+              {{ c.status === 1 ? '可使用' : c.status === 2 ? '已使用' : '已过期' }}
+            </el-tag>
+            <!-- 仅"已领取且未使用"展示去使用 -->
+            <el-button v-if="c.status === 1" type="success" size="small" round @click="onUse">
+              去使用
+            </el-button>
+          </div>
         </div>
       </div>
     </section>

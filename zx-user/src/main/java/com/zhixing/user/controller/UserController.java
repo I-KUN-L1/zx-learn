@@ -1,5 +1,6 @@
 package com.zhixing.user.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zhixing.api.dto.user.LoginFormDTO;
 import com.zhixing.api.dto.user.BootstrapAdminDTO;
@@ -124,6 +125,17 @@ public class UserController {
         return R.ok();
     }
 
+    /**
+     * 删除用户（管理员权限）。
+     * 禁止删除当前登录账号与系统最后一名管理员；详情扩展记录一并清理。
+     */
+    @DeleteMapping("/{id}")
+    @RequireRole(UserRole.STAFF)
+    public R<Void> deleteUser(@PathVariable Long id) {
+        userService.deleteUser(id);
+        return R.ok();
+    }
+
     @GetMapping("/me")
     public R<UserVO> me() {
         return R.ok(userService.queryMe());
@@ -141,9 +153,10 @@ public class UserController {
     }
 
     @GetMapping("/page")
-    @RequireRole(UserRole.STAFF)
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
     public R<PageDTO<UserVO>> page(PageQuery query, @RequestParam(required = false) Integer type) {
-        Page<User> page = userMapper.selectPage(query.toMpPage("id", false), null);
+        Page<User> page = userMapper.selectPage(query.toMpPage("id", false),
+                new LambdaQueryWrapper<User>().eq(type != null, User::getType, type));
         return R.ok(PageDTO.of(page, u -> BeanUtils.copyBean(u, UserVO.class)));
     }
 

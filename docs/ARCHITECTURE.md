@@ -149,7 +149,24 @@ graph LR
 
 - 编辑过程只写 `course_draft` 草稿表，支持反复修改不影响线上。
 - 上架（upShelf）时校验完整性（名称/分类/价格/教师）后同步到正式表 `course`。
-- 每次上架 `publishTimes + 1`，记录发布次数。
+
+> ⚠ **两张表，不是一个 status**（2026-09-16 修正）
+> `course_draft` 与 `course` 是**独立的两张表**，`course.status` 只有 `1-上架 / 0-下架`。
+> 曾经把草稿当成"`course` 表里 `status=2` 的行"，于是：
+> - 草稿箱 Tab 打 `/courses/page?status=2` → 永远查不到（草稿根本不在 `course` 表）；
+> - 网关白名单还专门为"管理端按 status 筛选草稿"加了 `optionalIdentity` 透传身份。
+>
+> 正确口径：
+> | 界面 | 数据源 | 接口 |
+> |---|---|---|
+> | 草稿箱（编辑态） | `course_draft`（`submitted=0`） | `GET /courses/draft/page`、`DELETE /courses/draft/{id}` |
+> | 已发布（发布态） | `course` | `GET /courses/page` |
+>
+> 草稿目录（分步表单第 2 步）存 `course_draft.catalogue_json`，上架时由
+> `CourseService#syncCatalogue` 按名称增量合并进 `course_catalogue`（不清空重建，
+> 避免抹掉已有讲义正文/要点/学习资料）。
+
+- 每次上架 `publishTimes + 1`，记录发布次数；同时把草稿标记 `submitted = 1`，让它离开草稿箱。
 
 ### 4.6 AI 多 Agent 智能助教（zx-aigc）
 

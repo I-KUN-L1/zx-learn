@@ -87,7 +87,8 @@ class TradeCouponServiceTest {
         BizIllegalException ex = assertThrows(BizIllegalException.class,
                 () -> service.deductStock(3L, 1L, 1, 1));
 
-        org.junit.jupiter.api.Assertions.assertTrue(ex.getMessage().contains("上限"));
+        // 提示须说明真实原因（这张券用过），不能误导成"领不了"
+        org.junit.jupiter.api.Assertions.assertTrue(ex.getMessage().contains("已使用过"));
     }
 
     @Test

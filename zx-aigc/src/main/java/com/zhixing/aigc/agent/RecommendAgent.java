@@ -51,12 +51,12 @@ public class RecommendAgent extends AbstractAgent {
 
     @Override
     public Flux<String> stream(ChatContext context) {
-        String reply = llmClient.chatWithTools(buildMessages(context), toolDefinitions(), this::runTool).block();
-        if (reply == null) {
-            reply = "";
-        }
-        // 工具执行完成后得到最终答复，按小块切片流式推送
-        return Flux.fromArray(reply.split("(?<=\\G.{8})"));
+        // 响应式改造：chatWithTools 内部已通过 subscribeOn(boundedElastic) 将阻塞的工具调用
+        // 循环移出 Netty 事件循环线程；此处不得 block()（SSE 订阅发生在 reactor-http-nio 线程，
+        // 阻塞会触发 IllegalStateException），直接以 flatMapMany 衔接切片推送
+        return llmClient.chatWithTools(buildMessages(context), toolDefinitions(), this::runTool)
+                .map(reply -> reply == null ? "" : reply)
+                .flatMapMany(reply -> Flux.fromArray(reply.split("(?<=\\G.{8})")));
     }
 
     /**

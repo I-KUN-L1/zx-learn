@@ -54,6 +54,9 @@ body {
   background: var(--zx-bg-card);
   border-radius: 12px;
   box-shadow: var(--zx-shadow);
+  /* 关键：卡片作为栅格/弹性子项时允许收缩。默认 min-width:auto 会让
+     长标题、宽表格、ECharts 容器把父容器撑破，表现为"内容溢出容器边界"。 */
+  min-width: 0;
   transition:
     box-shadow 0.25s ease,
     transform 0.25s ease;
@@ -68,6 +71,51 @@ body {
   max-width: 1280px;
   margin: 0 auto;
   padding: 24px 16px;
+}
+
+/* ===== 溢出兜底：图标 / 图表 / 媒体 / 长文本不越界 =====
+   背景：学情报告的"学习路径推荐"、看板图表等曾出现内容溢出卡片边界。
+   这里做全局兜底，页面级样式只需再处理个别特例。
+   注意：不约束 svg —— Element Plus 图标与 ECharts 依赖自身精确尺寸。 */
+img,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* 图表容器：自适应宽度且允许收缩，父栅格较窄时不会横向溢出 */
+.zx-chart-box {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Element Plus 步骤条：长标题/长描述强制换行，不撑破容器 */
+.el-steps {
+  overflow: hidden;
+}
+.el-step__title,
+.el-step__description,
+.el-step__head,
+.el-step__main {
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* 表格：内容过宽时在容器内横向滚动，而不是把整页撑出横向滚动条 */
+.zx-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* 单行省略（长课程名/长用户名等） */
+.zx-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .zx-text-secondary {

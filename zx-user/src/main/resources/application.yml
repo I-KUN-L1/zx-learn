@@ -19,7 +19,7 @@ spring:
     name: user-service
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/zx_user?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/zx_user?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${MYSQL_USERNAME}
     password: ${MYSQL_PASSWORD}
   data:
@@ -30,10 +30,11 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
-        enabled: false
+        # 关闭 Nacos 时靠各服务下方的 static simple.instances 直连；生产置 NACOS_ENABLED=true 并指向注册中心
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: ${NACOS_ENABLED:false}
       config:
-        enabled: false
+        enabled: ${NACOS_CONFIG_ENABLED:false}
 
 mybatis-plus:
   configuration:

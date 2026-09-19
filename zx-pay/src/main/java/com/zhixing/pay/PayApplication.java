@@ -1,5 +1,6 @@
 package com.zhixing.pay;
 
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 
@@ -7,6 +8,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
  * 支付服务启动类
  */
 @SpringBootApplication
+@MapperScan("com.zhixing.pay.mapper")
 public class PayApplication {
 
     public static void main(String[] args) {

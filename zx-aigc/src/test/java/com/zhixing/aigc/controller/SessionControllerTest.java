@@ -43,10 +43,12 @@ class SessionControllerTest {
 
     @Test
     void deleteWithQueryParamDelegatesToService() {
-        // 兼容历史 query 参数：body 为 null，userId 缺失时回退 0L
+        // 兼容历史 query 参数：body 为 null。
+        // userId 缺失必须原样传 null（**不能回退 0L**）：null 表示"无 user-info 头的服务间内部调用"，
+        // 是 SessionService 归属校验的放行条件；回退成 0L 会被当成"用户 0"而无权访问任何会话。
         assertTrue(controller.delete(null, "query-param-id", null).success());
 
-        verify(sessionService).delete("query-param-id", 0L);
+        verify(sessionService).delete("query-param-id", null);
     }
 
     @Test
@@ -60,9 +62,9 @@ class SessionControllerTest {
 
     @Test
     void deleteWithEmptyBodyAndNoParamDoesNotThrow() {
-        // 空请求体 + 无 query 参数：不抛异常，传入 null 会话记录
+        // 空请求体 + 无 query 参数：不抛异常，传入 null 会话记录 + null 身份（内部调用语义）
         assertTrue(controller.delete(null, null, null).success());
 
-        verify(sessionService).delete(null, 0L);
+        verify(sessionService).delete(null, null);
     }
 }

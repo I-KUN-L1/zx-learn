@@ -7,6 +7,7 @@ import com.zhixing.auth.common.util.JwtTool;
 import com.zhixing.auth.domain.po.LoginRecord;
 import com.zhixing.auth.domain.vo.LoginResultVO;
 import com.zhixing.auth.mapper.LoginRecordMapper;
+import com.zhixing.common.exceptions.AccountDisabledException;
 import com.zhixing.common.exceptions.BadRequestException;
 import com.zhixing.common.exceptions.UnauthorizedException;
 import com.zhixing.common.utils.StringUtils;
@@ -51,7 +52,8 @@ public class AccountService {
             throw new UnauthorizedException("用户名或密码错误");
         }
         if (user.getStatus() != null && user.getStatus() != 1) {
-            throw new UnauthorizedException("账号已被禁用");
+            // 专属业务码 423：前端据此弹出"请联系管理员"提示弹窗，而不是泛化的登录失败
+            throw new AccountDisabledException("该账号已被禁用，请联系管理员");
         }
 
         LoginResultVO result = new LoginResultVO();

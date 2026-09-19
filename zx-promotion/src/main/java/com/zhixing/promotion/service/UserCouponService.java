@@ -2,6 +2,9 @@ package com.zhixing.promotion.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.zhixing.common.domain.PageDTO;
+import com.zhixing.common.domain.PageQuery;
 import com.zhixing.common.exceptions.BadRequestException;
 import com.zhixing.common.exceptions.BizIllegalException;
 import com.zhixing.promotion.domain.po.Coupon;
@@ -10,6 +13,7 @@ import com.zhixing.promotion.domain.vo.UserCouponVO;
 import com.zhixing.promotion.mapper.CouponMapper;
 import com.zhixing.promotion.mapper.UserCouponMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +30,13 @@ import java.util.stream.Collectors;
  * 领取与兑换码核销均以 user_coupon 上的 (user_id, coupon_id) 唯一索引做一次性兜底，
  * 并发重复领取/兑换由 DB 唯一约束拦截（DuplicateKeyException）转为幂等提示。
  * </p>
+ * <p>
+ * <b>状态权威口径</b>：user_coupon.status 是"券是否可用"的唯一依据，券列表、下单选券
+ * 都读它。因此交易服务核销/退回优惠券后，必须回写这里的状态（见 {@link #markUsed} /
+ * {@link #markRefunded}），否则会出现"券已经用掉了，列表还显示未使用"的漂移。
+ * </p>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserCouponService {
@@ -101,6 +111,9 @@ public class UserCouponService {
 
     /**
      * 使用优惠券：仅未使用状态可流转至已使用。
+     * <p>
+     * 面向学员端的显式操作（{@code POST /user-coupons/{id}/use}），重复使用按业务错误提示；
+     * 交易服务下单核销后的状态回写请走幂等的 {@link #markUsed}。
      */
     public void use(Long userCouponId, Long orderId) {
         UserCoupon userCoupon = userCouponMapper.selectById(userCouponId);
@@ -117,6 +130,102 @@ public class UserCouponService {
         userCoupon.setUseTime(LocalDateTime.now());
         userCoupon.setOrderId(orderId);
         userCouponMapper.updateById(userCoupon);
+    }
+
+    /**
+     * <b>幂等</b>标记「已使用」——交易服务下单核销优惠券后回写状态（内部 Feign 调用）。
+     * <p>
+     * 与 {@link #use(Long, Long)} 的差别在于幂等语义：同步 Feign 重试、MQ 重复消费、
+     * 对账任务重放都会重复调用本方法，因此"已使用"必须静默返回而不是抛错，
+     * 否则重复投递会污染调用方链路。
+     * </p>
+     *
+     * @param userCouponId 用户券行 id（优先按主键定位）
+     * @param userId       兜底定位：userId + couponId
+     * @param couponId     兜底定位：userId + couponId
+     * @param orderId      核销订单 id
+     * @return true=本次发生了状态流转；false=无需变更（已使用 / 券不存在）
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markUsed(Long userCouponId, Long userId, Long couponId, Long orderId) {
+        UserCoupon userCoupon = locate(userCouponId, userId, couponId);
+        if (userCoupon == null) {
+            log.warn("券状态同步：用户券不存在，跳过。userCouponId={}, userId={}, couponId={}, orderId={}",
+                    userCouponId, userId, couponId, orderId);
+            return false;
+        }
+        if (userCoupon.getStatus() != null && userCoupon.getStatus() == USED) {
+            // 幂等：已使用（重复投递 / 重放）直接返回
+            if (orderId != null && userCoupon.getOrderId() != null
+                    && !orderId.equals(userCoupon.getOrderId())) {
+                log.warn("券状态同步：券 {} 已由订单 {} 核销，本次订单 {} 不覆盖",
+                        userCoupon.getId(), userCoupon.getOrderId(), orderId);
+            }
+            return false;
+        }
+        userCoupon.setStatus(USED);
+        userCoupon.setUseTime(LocalDateTime.now());
+        userCoupon.setOrderId(orderId);
+        userCouponMapper.updateById(userCoupon);
+        log.info("券状态同步为已使用：userCouponId={}, userId={}, couponId={}, orderId={}",
+                userCoupon.getId(), userCoupon.getUserId(), userCoupon.getCouponId(), orderId);
+        return true;
+    }
+
+    /**
+     * <b>幂等</b>退回优惠券——订单超时关单 / 取消后回写（内部 Feign 调用）。
+     * <p>
+     * 按 {@code order_id} 精确定位该单核销掉的券，避免误伤用户后续在新订单里用同一张券的情况。
+     * 券已过有效期则置为「已过期」，防止过期券被退回后又能使用。
+     * </p>
+     *
+     * @return 本次还原的券行数（0 表示无需变更，幂等）
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int markRefunded(Long orderId) {
+        if (orderId == null) {
+            return 0;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        // 仍在有效期内 → 还原为未使用（可再次使用）
+        int restored = userCouponMapper.update(null, new LambdaUpdateWrapper<UserCoupon>()
+                .eq(UserCoupon::getOrderId, orderId)
+                .eq(UserCoupon::getStatus, USED)
+                .and(w -> w.isNull(UserCoupon::getValidEndTime)
+                        .or().gt(UserCoupon::getValidEndTime, now))
+                .set(UserCoupon::getStatus, UNUSED)
+                .set(UserCoupon::getUseTime, null)
+                .set(UserCoupon::getOrderId, null));
+        // 已过有效期 → 置为已过期（不能因为退回而"复活"过期券）
+        int expired = userCouponMapper.update(null, new LambdaUpdateWrapper<UserCoupon>()
+                .eq(UserCoupon::getOrderId, orderId)
+                .eq(UserCoupon::getStatus, USED)
+                .isNotNull(UserCoupon::getValidEndTime)
+                .le(UserCoupon::getValidEndTime, now)
+                .set(UserCoupon::getStatus, EXPIRED)
+                .set(UserCoupon::getUseTime, null)
+                .set(UserCoupon::getOrderId, null));
+        if (restored + expired > 0) {
+            log.info("券状态退回：orderId={}, 还原未使用={}, 置为已过期={}", orderId, restored, expired);
+        }
+        return restored + expired;
+    }
+
+    /** 定位用户券：优先主键；主键缺失（前端未回传）时按 (userId, couponId) 兜底 */
+    private UserCoupon locate(Long userCouponId, Long userId, Long couponId) {
+        if (userCouponId != null) {
+            UserCoupon byId = userCouponMapper.selectById(userCouponId);
+            if (byId != null) {
+                return byId;
+            }
+        }
+        if (userId == null || couponId == null) {
+            return null;
+        }
+        return userCouponMapper.selectOne(new LambdaQueryWrapper<UserCoupon>()
+                .eq(UserCoupon::getUserId, userId)
+                .eq(UserCoupon::getCouponId, couponId)
+                .last("LIMIT 1"));
     }
 
     /**
@@ -162,7 +271,45 @@ public class UserCouponService {
 
     /** 用户优惠券 VO 列表（对齐前端 UserCouponVO 契约：discountValue 字段 + 状态语义 0/1/2 → 1/2/3） */
     public List<UserCouponVO> listVosByUser(Long userId, Integer status) {
-        return listByUser(userId, status).stream().map(this::toVO).toList();
+        return listByUser(userId, toStoredStatus(status)).stream().map(this::toVO).toList();
+    }
+
+    /**
+     * 用户优惠券分页（对齐前端 {@code GET /user-coupons/page} 契约）。
+     * <p>
+     * 历史缺陷：前端 {@code api/promotion.ts} 的 {@code myCouponsPage()} 已声明调用
+     * {@code /user-coupons/page}，但后端只有裸 {@code @GetMapping} 的列表接口，
+     * 该路径必然 404——属"埋雷"（当前无页面调用，一旦有人用就踩）。
+     * </p>
+     * <p>
+     * status 语义与列表接口<b>完全一致</b>：入参与返回体同为 1未使用 / 2已使用 / 3已过期。
+     * 注意必须<b>先转换再判空</b>：若在转换前判空，非法入参会退化成
+     * {@code status = null} 这种永不匹配的条件（见 {@link #toStoredStatus(Integer)} 注释）。
+     * </p>
+     */
+    public PageDTO<UserCouponVO> pageVosByUser(PageQuery query, Long userId, Integer frontStatus) {
+        Integer stored = toStoredStatus(frontStatus);
+        Page<UserCoupon> page = userCouponMapper.selectPage(query.toMpPage("create_time", false),
+                new LambdaQueryWrapper<UserCoupon>()
+                        .eq(UserCoupon::getUserId, userId)
+                        .eq(stored != null, UserCoupon::getStatus, stored));
+        return PageDTO.of(page, this::toVO);
+    }
+
+    /**
+     * 前端状态语义（1未使用 / 2已使用 / 3已过期）→ 存储语义（0 / 1 / 2）。
+     * <p>
+     * 筛选入参必须与<b>返回的 status 字段同语义</b>，否则调用方"按返回什么就筛什么"会筛错：
+     * 历史实现直接透传参数，导致 {@code GET /user-coupons?status=1} 返回的是「已使用」的券
+     * （存储 1），而返回体里 status=1 却代表「未使用」—— 同一个接口两套语义。
+     * 传非法值（null / 越界）时不筛选，避免把筛选条件写成永不匹配。
+     */
+    Integer toStoredStatus(Integer status) {
+        if (status == null) {
+            return null;
+        }
+        int stored = status - 1;
+        return (stored < UNUSED || stored > EXPIRED) ? null : stored;
     }
 
     /** 用户优惠券 PO → VO */

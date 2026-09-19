@@ -6,34 +6,40 @@ import { pageCourses, getCategoryAll } from '@/api/course'
 import { pageCoupons } from '@/api/promotion'
 import CourseCard from '@/components/course/CourseCard.vue'
 import SkeletonCards from '@/components/common/SkeletonCards.vue'
+import { useUserStore } from '@/stores/user'
 import type { Category, CouponVO, CourseVO } from '@/types/api'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 /* ---------- 轮播 ---------- */
+/**
+ * 首页横幅图片：本地静态 SVG（zx-web/public/banners/）。
+ *
+ * ⚠ 这里原先用的是文生图接口 `trae-api-cn.mchost.guru/api/ide/v1/text_to_image?...`
+ * —— 那是「按需生成」的服务端点，**不是静态图片资源**，现已返回 HTTP 404，
+ * 三个轮播位全部裂图。改用本地静态资源：不依赖外网、离线可跑、永不失效。
+ */
 const banners = ref([
   {
     id: 1,
     title: 'AI 时代的学习方式：知行智学全新升级',
     tagline: 'AI 助教全天候陪伴，打造「知-学-行-评」学习闭环',
-    image:
-      'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=online%20education%20platform%20banner%2C%20AI%20assistant%20robot%20teacher%20with%20students%2C%20indigo%20blue%20gradient%2C%20modern%20illustration%2C%20wide%20banner&image_size=landscape_16_9',
+    image: '/banners/banner-01.svg',
     link: '/assistant',
   },
   {
     id: 2,
     title: 'Java 全栈工程师成长计划',
     tagline: '从 Java 21 到 Spring Cloud 微服务，一站式进阶',
-    image:
-      'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=online%20education%20banner%2C%20java%20full%20stack%20developer%20roadmap%2C%20laptop%20with%20code%2C%20indigo%20purple%20gradient%2C%20wide%20banner&image_size=landscape_16_9',
+    image: '/banners/banner-02.svg',
     link: '/courses',
   },
   {
     id: 3,
     title: '限量秒杀：热门课程 5 折起',
     tagline: '每天 10:00 开抢，先到先得',
-    image:
-      'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=flash%20sale%20banner%2C%20discount%20shopping%2C%20red%20and%20orange%20festive%20design%2C%20lightning%20bolt%2C%20wide%20banner&image_size=landscape_16_9',
+    image: '/banners/banner-03.svg',
     link: '/trade/coupons',
   },
 ])
@@ -55,6 +61,23 @@ const features = [
   { icon: DataAnalysis, title: '学情报告', desc: '能力雷达画像与个性化学习路径推荐', path: '/insight' },
   { icon: Promotion, title: '优惠秒杀', desc: '限时秒杀券，热门课程 5 折起', path: '/trade/coupons' },
 ]
+
+/** 学员专属入口（游客可见引导注册；教师/管理员无权限不渲染） */
+const STUDENT_ONLY_PATHS = ['/learning', '/insight', '/trade/coupons']
+
+/** 按钮级权限过滤：教师/管理员仅保留 AI 助教等公共入口 */
+const visibleFeatures = computed(() =>
+  features.filter(
+    (f) => !(userStore.isLoggedIn && !userStore.isStudent && STUDENT_ONLY_PATHS.includes(f.path)),
+  ),
+)
+
+/** 秒杀类 Banner 仅游客与学员可见 */
+const visibleBanners = computed(() =>
+  banners.value.filter(
+    (b) => !(userStore.isLoggedIn && !userStore.isStudent && b.link === '/trade/coupons'),
+  ),
+)
 
 onMounted(async () => {
   try {
@@ -78,7 +101,7 @@ onMounted(async () => {
   <div class="zx-page">
     <!-- 轮播 Banner -->
     <el-carousel height="360px" class="zx-card overflow-hidden" :interval="5000" arrow="hover">
-      <el-carousel-item v-for="b in banners" :key="b.id">
+      <el-carousel-item v-for="b in visibleBanners" :key="b.id">
         <div class="relative h-full cursor-pointer" @click="router.push(b.link)">
           <img :src="b.image" :alt="b.title" class="h-full w-full object-cover" />
           <div class="zx-banner-mask absolute inset-0 flex flex-col justify-center px-10 md:px-16">
@@ -98,7 +121,7 @@ onMounted(async () => {
     <!-- 特色功能入口 -->
     <div class="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div
-        v-for="f in features"
+        v-for="f in visibleFeatures"
         :key="f.title"
         class="zx-card zx-card-hover flex cursor-pointer items-center gap-4 p-5"
         @click="router.push(f.path)"
@@ -141,7 +164,16 @@ onMounted(async () => {
             {{ activityCoupons.map((c) => `${c.name}（剩 ${c.remainNum} 张）`).join(' · ') }}
           </div>
         </div>
-        <el-button type="danger" round plain @click="router.push('/trade/coupons')">去抢券</el-button>
+        <!-- 抢券入口：教师/管理员无交易权限，不渲染（RBAC） -->
+        <el-button
+          v-if="!userStore.isLoggedIn || userStore.isStudent"
+          type="danger"
+          round
+          plain
+          @click="router.push('/trade/coupons')"
+        >
+          去抢券
+        </el-button>
       </div>
     </section>
 

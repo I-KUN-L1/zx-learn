@@ -13,8 +13,12 @@ CREATE TABLE IF NOT EXISTS knowledge_chunk (
     lesson_id   BIGINT,
     title       VARCHAR(255),
     content     TEXT      NOT NULL,
-    -- 维度需与应用侧 zx.llm.embedding-dimension（默认 1536）保持一致
-    embedding   vector(1536),
+    -- 维度需与应用侧 zx.llm.embedding-dimension（默认 1024）**严格一致**：
+    --   · 智谱 embedding-3 合法维度为 256/512/1024/2048（不含 1536）；
+    --   · pgvector 的 HNSW 索引对 vector 类型上限 2000 维，故 2048 维无法建索引；
+    --   两者取交集后本项目统一使用 1024。
+    -- 若已存在旧数据卷（列维度不同），执行 migrate-embedding-dim.sql 做幂等迁移。
+    embedding   vector(1024),
     create_time TIMESTAMPTZ DEFAULT now()
 );
 

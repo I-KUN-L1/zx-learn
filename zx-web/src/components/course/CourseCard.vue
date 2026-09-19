@@ -3,12 +3,15 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { UserFilled } from '@element-plus/icons-vue'
 import { formatPrice } from '@/utils/format'
+import CourseCover from '@/components/course/CourseCover.vue'
 import type { CourseVO } from '@/types/api'
 
 const props = defineProps<{
   course: CourseVO
   /** 是否展示发布次数（管理端） */
   showPublish?: boolean
+  /** 当前学员是否已拥有该课程（以「我的课表」为准）：显示「已拥有」角标 */
+  owned?: boolean
 }>()
 
 const router = useRouter()
@@ -31,14 +34,21 @@ function goDetail() {
 <template>
   <div class="zx-card zx-card-hover group cursor-pointer overflow-hidden" @click="goDetail">
     <div class="relative">
-      <img
-        :src="course.coverUrl"
-        :alt="course.name"
-        class="h-[150px] w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-        loading="lazy"
-      />
+      <div class="h-[150px] w-full overflow-hidden">
+        <CourseCover :src="course.coverUrl" :name="course.name" :seed="course.id" />
+      </div>
       <el-tag
-        v-if="course.free === 1"
+        v-if="owned"
+        type="primary"
+        effect="dark"
+        size="small"
+        class="absolute left-3 top-3"
+        round
+      >
+        已拥有
+      </el-tag>
+      <el-tag
+        v-else-if="course.free === 1"
         type="success"
         effect="dark"
         size="small"
@@ -61,8 +71,9 @@ function goDetail() {
       <h3 class="line-clamp-2 min-h-[44px] text-[15px] font-semibold leading-[22px]">
         {{ course.name }}
       </h3>
-      <div class="mt-3 flex items-center justify-between">
-        <div class="zx-text-secondary flex items-center gap-3 text-xs">
+      <div class="mt-3 flex items-center justify-between gap-2">
+        <!-- 元信息可换行、可收缩：避免"人在学/评分/发布次数"过长把价格挤出卡片 -->
+        <div class="zx-text-secondary flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span v-if="course.enrollNum != null" class="flex items-center gap-1">
             <el-icon><UserFilled /></el-icon>
             {{ course.enrollNum.toLocaleString() }} 人在学
@@ -73,7 +84,14 @@ function goDetail() {
           </span>
         </div>
         <span
-          class="text-base font-bold"
+          v-if="owned"
+          class="shrink-0 text-sm font-semibold text-primary"
+        >
+          继续学习
+        </span>
+        <span
+          v-else
+          class="shrink-0 text-base font-bold"
           :class="course.free === 1 ? 'text-green-500' : 'text-primary'"
         >
           {{ priceText }}

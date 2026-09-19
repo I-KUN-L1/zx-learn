@@ -84,6 +84,13 @@ public class SeckillService {
      * <p>所有业务结果（含拒绝）均以 200 + 状态字段返回，保证接口零事务、低延迟。</p>
      */
     public Map<String, Object> claim(Long userId, Long couponId) {
+        // 前置校验：仅"秒杀类型且进行中"的券允许走秒杀链路。
+        // 若不校验，普通券会被下方惰性预热写入 Redis 余量，进而经秒杀通道被领取（越权领券）。
+        Coupon coupon = couponService.getById(couponId);
+        if (!Integer.valueOf(CouponService.TYPE_SECKILL).equals(coupon.getType())
+                || !Integer.valueOf(CouponService.STATE_ONGOING).equals(coupon.getStatus())) {
+            return Map.of("status", STATUS_NOT_READY);
+        }
         // 惰性预热：若活动余量 key 尚未写入（首次抢购/服务重启后 Redis 清空），先按券余量 SETNX 补齐，
         // 避免未走管理端 warmup 导致秒杀一直 NOT_READY。
         String stockKey = String.format(STOCK_KEY, couponId);

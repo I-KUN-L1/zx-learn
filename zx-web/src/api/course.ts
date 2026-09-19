@@ -1,5 +1,12 @@
 import { request } from './request'
-import type { Category, CourseFormDTO, CourseVO, PageDTO, PageQuery } from '@/types/api'
+import type {
+  Category,
+  CourseDraftVO,
+  CourseFormDTO,
+  CourseVO,
+  PageDTO,
+  PageQuery,
+} from '@/types/api'
 
 /**
  * 课程服务（zx-course）
@@ -11,9 +18,25 @@ export interface CoursePageParams extends PageQuery {
   status?: number | ''
 }
 
-/** 课程分页 */
+/** 课程分页（正式表 course） */
 export function pageCourses(params: CoursePageParams) {
   return request.get<PageDTO<CourseVO>>('/courses/page', params as Record<string, unknown>)
+}
+
+/**
+ * 草稿箱分页（草稿表 course_draft）。
+ *
+ * ⚠ 别用 `/courses/page` 加 status 来取草稿：草稿根本不在 course 表里，
+ * `course.status` 只有 0/1，用 status=2 查必然返回空列表 —— 这正是
+ * 「新建课程提示保存成功，草稿箱却始终为空」的根因。
+ */
+export function pageDrafts(params: CoursePageParams) {
+  return request.get<PageDTO<CourseDraftVO>>('/courses/draft/page', params as Record<string, unknown>)
+}
+
+/** 删除草稿（仅限未发布的草稿） */
+export function deleteDraft(id: number) {
+  return request.delete<null>(`/courses/draft/${id}`)
 }
 
 /** 课程详情 */

@@ -19,23 +19,33 @@ spring:
     name: trade-service
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/zx_trade?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/zx_trade?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${MYSQL_USERNAME}
     password: ${MYSQL_PASSWORD}
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
-        enabled: false
+        # 关闭 Nacos 时靠各服务下方的 static simple.instances 直连；生产置 NACOS_ENABLED=true 并指向注册中心
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: ${NACOS_ENABLED:false}
       config:
-        enabled: false
+        enabled: ${NACOS_CONFIG_ENABLED:false}
     # 本地开发直连：关闭 Nacos 后，通过 SimpleDiscoveryClient 提供静态服务地址（生产环境删除此段并启用 Nacos）
     discovery:
       client:
         simple:
           instances:
             course-service:
-              - uri: http://localhost:8083
+              - uri: ${SVC_COURSE_URI:http://localhost:8083}
+            # 管理端订单需补全下单用户信息、退款审批需读取学员学习进度
+            user-service:
+              - uri: ${SVC_USER_URI:http://localhost:8082}
+            learning-service:
+              - uri: ${SVC_LEARNING_URI:http://localhost:8086}
+            # 用券核销后回写券状态（CouponStatusSyncer）必须能解析到营销服务，
+            # 否则 Feign 抛 503 被 fail-open 吞掉 → 券列表永远显示"未使用"
+            promotion-service:
+              - uri: ${SVC_PROMOTION_URI:http://localhost:8088}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -51,6 +61,15 @@ tx:
     # 本地消息表补偿扫描批次大小与间隔
     msg-scan-batch: 100
     msg-scan-admin: 3000
+    # -------- 死信可观测性（DeadMsgReplayJob + OrderMsgMetrics） --------
+    # 死信重放：默认开启，每 30 分钟一轮；每轮只给一次投递机会，失败立即回到死信
+    dead-replay-enabled: ${TX_DEAD_REPLAY_ENABLED:true}
+    dead-replay-interval: 1800000
+    dead-replay-batch: 200
+    # 死信告警外发地址（企业微信/钉钉/自建告警网关）。留空则只出指标与日志，不外发
+    dead-alert-webhook: ${TX_DEAD_ALERT_WEBHOOK:}
+    # 告警冷却（秒）：死信持续存在时避免每轮刷屏
+    dead-alert-cooldown-seconds: 1800
 
 # ------------------- RocketMQ 配置 -------------------
 rocketmq:

@@ -92,6 +92,12 @@ public class CourseQuotaService {
             if (rows == 0) {
                 throw new BizIllegalException("课程名额已满，确认失败：courseId=" + msg.getCourseId());
             }
+            // 归还上面这次"占位"：本分支直接落 CONFIRMED，不会产生 LOCKED 流水，
+            // 而 locked_count 的唯一递减点（正常 confirm/release 分支）都要求先有 LOCKED 记录。
+            // 若保留占位，locked_count 将**只增不减**，逐步虚占名额：一旦课程设置了 quota，
+            // 会越卖越"满"，最终误报"名额已满"而无法下单（可复现的历史缺陷）。
+            // 这里保留"先 +1 再 -1"而非直接去掉 +1，是为了让超卖校验仍是原子的条件更新。
+            releaseLockedCount(msg.getCourseId());
             insertRecord(msg, STATUS_CONFIRMED);
             increaseSold(msg.getCourseId());
             log.info("课程名额补确认成功（原锁定消息丢失）：orderId={}, courseId={}",
@@ -114,9 +120,7 @@ public class CourseQuotaService {
             return;
         }
         // 锁定释放 + 销量 +1（GREATEST 兜底，避免计数被手工数据干扰为负）
-        courseQuotaMapper.update(null, new LambdaUpdateWrapper<CourseQuota>()
-                .eq(CourseQuota::getCourseId, msg.getCourseId())
-                .setSql("locked_count = GREATEST(locked_count - 1, 0)"));
+        releaseLockedCount(msg.getCourseId());
         increaseSold(msg.getCourseId());
         log.info("课程名额确认成功：orderId={}, courseId={}", msg.getOrderId(), msg.getCourseId());
     }
@@ -148,15 +152,27 @@ public class CourseQuotaService {
         if (rows == 0) {
             return;
         }
-        courseQuotaMapper.update(null, new LambdaUpdateWrapper<CourseQuota>()
-                .eq(CourseQuota::getCourseId, msg.getCourseId())
-                .setSql("locked_count = GREATEST(locked_count - 1, 0)"));
+        releaseLockedCount(msg.getCourseId());
         log.info("课程名额释放成功：orderId={}, courseId={}", msg.getOrderId(), msg.getCourseId());
     }
 
     private CourseQuotaRecord findRecord(Long orderId) {
         return quotaRecordMapper.selectOne(new LambdaQueryWrapper<CourseQuotaRecord>()
                 .eq(CourseQuotaRecord::getOrderId, orderId));
+    }
+
+    /**
+     * 归还一个"在途"名额占位：{@code locked_count = max(locked_count - 1, 0)}。
+     *
+     * <p>{@code GREATEST(...,0)} 是兜底，避免历史脏数据（手工改库 / 早期版本遗留）把计数减成负数。
+     * {@code locked_count} 的语义是「已锁定但未确认」的在途名额数，因此**每一个 +1 都必须有且仅有一次对应的 -1**；
+     * {@code course_quota_record} 中以 status=1（已锁定）存在的行数即为其权威值，可用
+     * {@code sql/reconcile.sql} 的第 7 项对账。
+     */
+    private void releaseLockedCount(Long courseId) {
+        courseQuotaMapper.update(null, new LambdaUpdateWrapper<CourseQuota>()
+                .eq(CourseQuota::getCourseId, courseId)
+                .setSql("locked_count = GREATEST(locked_count - 1, 0)"));
     }
 
     /** course_quota 行不存在则初始化（quota 默认 NULL 不限名额），并发靠 course_id 唯一索引兜底 */

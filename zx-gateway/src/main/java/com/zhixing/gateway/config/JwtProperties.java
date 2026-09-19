@@ -36,6 +36,12 @@ public class JwtProperties {
             "/coupons/page",
             "/order-details/enrollNum",
             // 图片公开访问（上传 POST /files 不在白名单，仍需员工/教师鉴权）
-            "/files/view/**"
+            "/files/view/**",
+            // 第三方支付回调：支付渠道持有的是渠道密钥、不持有平台 JWT，必须匿名可达。
+            // 安全性由 zx-pay 的 HMAC-SHA256 验签保证（pay.notify.secret / PAY_CALLBACK_SECRET）：
+            // 密钥缺失时回调一律 fail-closed（501），验签失败 401——放行不等于放行伪造的"支付成功"。
+            // 仅显式放行这两个具体路径，不用 /notify/** 通配，避免日后新增回调端点被静默暴露。
+            "/notify/alipay",
+            "/notify/wxpay"
     );
 }

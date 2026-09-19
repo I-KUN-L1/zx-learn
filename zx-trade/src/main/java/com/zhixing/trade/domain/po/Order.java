@@ -42,6 +42,15 @@ public class Order extends BasePO {
     /** 状态：0-待支付 1-已支付 2-已取消 */
     private Integer status;
 
+    /**
+     * 学员侧删除标记：0 未删除 / 1 学员已删除。
+     * <p>
+     * 刻意不复用 {@code BasePO.deleted}（MyBatis-Plus @TableLogic）：逻辑删除会让
+     * 管理端也查不到，而需求要求「用户端删除后管理端仍保留记录」。因此单独一列，
+     * 只作用于学员端"我的订单"查询。
+     */
+    private Integer userDeleted;
+
     /** 支付方式 */
     private Integer payType;
 

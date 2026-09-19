@@ -25,7 +25,20 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
-        enabled: false
+        # 关闭 Nacos 时靠各服务下方的 static simple.instances 直连；生产置 NACOS_ENABLED=true 并指向注册中心
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: ${NACOS_ENABLED:false}
       config:
-        enabled: false
+        enabled: ${NACOS_CONFIG_ENABLED:false}
+    # 本地开发直连：关闭 Nacos 后，通过 SimpleDiscoveryClient 提供静态服务地址（生产环境删除此段并启用 Nacos）
+    #
+    # ⚠ 这不再是"可选优化"：搜索与推荐位的数据全部来自 course-service
+    # （CourseClient 的 /course/portal、/course/name），解析不到实例时 Feign 走降级
+    # CourseClientFallbackFactory 返回空列表，表现为"搜索恒为空"却没有任何报错。
+    # 删掉本段必须同时启用 Nacos，否则搜索功能静默失效。
+    discovery:
+      client:
+        simple:
+          instances:
+            course-service:
+              - uri: ${SVC_COURSE_URI:http://localhost:8083}

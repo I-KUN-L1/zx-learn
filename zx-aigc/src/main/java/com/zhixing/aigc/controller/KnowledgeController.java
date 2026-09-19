@@ -15,8 +15,14 @@ import java.util.Map;
 /**
  * 知识库管理接口（RAG 知识入库 / 检索）
  * <p>
- * 权限：写操作（上传）由 @RequireRole 声明为教师(3)/员工(1)——网关从 JWT role claim
- * 解析后经 role-info 头透传，RoleInterceptor 统一校验；查询接口（检索/预览）仅要求登录。
+ * 权限：本控制器整体挂在 {@code /admin/knowledge} 下，属于**管理侧**能力。
+ * 原先只有写操作（upload）声明了 {@code @RequireRole}，查询接口（检索/预览）仅要求登录，
+ * 导致任意已登录学员都能调用 {@code /admin/knowledge/search} 读取内部知识库切片
+ * （越权面，上线审查发现）。现统一由 {@code @RequireRole} 声明为教师(3)/员工(1)：
+ * 网关从 JWT role claim 解析后经 role-info 头透传，RoleInterceptor 统一校验。
+ * <p>
+ * 注意：AI 助教的 RAG 检索走 {@code KnowledgeService} 内部直连，不经过本控制器的 HTTP 端点，
+ * 因此收紧权限不影响学员侧对话功能。
  */
 @Slf4j
 @RestController
@@ -47,9 +53,10 @@ public class KnowledgeController {
     }
 
     /**
-     * 向量检索（演示/联调用）
+     * 向量检索（管理端联调/排障用）
      */
     @PostMapping("/search")
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
     public R<List<ChunkHit>> search(@RequestBody Map<String, String> body) {
         String query = body.getOrDefault("query", "");
         int topK = Integer.parseInt(body.getOrDefault("topK", "3"));
@@ -60,6 +67,7 @@ public class KnowledgeController {
      * 预览切片结果（不落库）
      */
     @PostMapping("/preview")
+    @RequireRole({UserRole.STAFF, UserRole.TEACHER})
     public R<List<String>> preview(@RequestBody Map<String, String> body) {
         return R.ok(knowledgeService.previewChunks(body.getOrDefault("content", "")));
     }

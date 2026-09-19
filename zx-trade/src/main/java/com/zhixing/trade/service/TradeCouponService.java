@@ -87,8 +87,10 @@ public class TradeCouponService {
         Long result = redisTemplate.execute(deductScript, Arrays.asList(stockKey, usedKey),
                 String.valueOf(limit), String.valueOf(amount));
         if (result == null || result != 1L) {
+            // -2 = 该用户对该券的核销次数已达 limit（默认每张券限用 1 次），
+            // 绝大多数情况是"这张券之前已经用过了"，提示须贴近真实原因，避免误导成"领不了"
             throw new BizIllegalException(result != null && result == -2L
-                    ? "该优惠券已达领取上限"
+                    ? "该优惠券已使用过（每张券限用一次），请选择其它优惠券"
                     : "优惠券库存不足，请刷新后再试");
         }
     }

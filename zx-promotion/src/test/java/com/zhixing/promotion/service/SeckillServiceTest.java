@@ -29,6 +29,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -76,8 +77,36 @@ class SeckillServiceTest {
         when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any())).thenReturn(code);
     }
 
+    /**
+     * claim 的前置校验要求券必须是"秒杀类型 + 进行中"，否则直接返回 NOT_READY
+     * （防止普通券被秒杀通道领取）。同时声明活动余量已预热，跳过惰性 warmup 链路，
+     * 使用例聚焦于 Lua 结果分发。
+     */
+    private void stubOngoingSeckillCoupon() {
+        Coupon coupon = new Coupon();
+        coupon.setId(1L);
+        coupon.setType(CouponService.TYPE_SECKILL);
+        coupon.setStatus(CouponService.STATE_ONGOING);
+        when(couponService.getById(1L)).thenReturn(coupon);
+        when(redisTemplate.hasKey(anyString())).thenReturn(true);
+    }
+
+    @Test
+    void claimRejectsNonSeckillCoupon() {
+        // 普通券（type=1）不得走秒杀链路，避免被惰性预热后经秒杀通道反复领取
+        Coupon normal = new Coupon();
+        normal.setId(1L);
+        normal.setType(CouponService.TYPE_NORMAL);
+        normal.setStatus(CouponService.STATE_ONGOING);
+        when(couponService.getById(1L)).thenReturn(normal);
+
+        assertEquals(SeckillService.STATUS_NOT_READY, service.claim(100L, 1L).get("status"));
+        verifyNoInteractions(rocketMQTemplate);
+    }
+
     @Test
     void claimSuccessReturnsQueuingAndSendsMsg() {
+        stubOngoingSeckillCoupon();
         luaReturns(1L);
         when(rocketMQTemplate.send(any(), any(), any())).thenReturn(true);
 
@@ -90,6 +119,7 @@ class SeckillServiceTest {
     @Test
     void claimStillQueuingWhenMqDown() {
         // MQ 不可用：不阻塞用户，返回排队中，由对账任务补偿
+        stubOngoingSeckillCoupon();
         luaReturns(1L);
         when(rocketMQTemplate.send(any(), any(), any())).thenReturn(false);
 
@@ -100,6 +130,7 @@ class SeckillServiceTest {
 
     @Test
     void claimMapsLuaRejectCodes() {
+        stubOngoingSeckillCoupon();
         luaReturns(-1L);
         assertEquals(SeckillService.STATUS_SOLD_OUT, service.claim(100L, 1L).get("status"));
 

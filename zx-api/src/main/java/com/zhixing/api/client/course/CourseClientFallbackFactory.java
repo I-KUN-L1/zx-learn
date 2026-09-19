@@ -1,5 +1,6 @@
 package com.zhixing.api.client.course;
 
+import com.zhixing.api.dto.course.CourseCatalogueDTO;
 import com.zhixing.api.dto.course.CourseSimpleInfoDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.openfeign.FallbackFactory;
@@ -43,6 +44,22 @@ public class CourseClientFallbackFactory implements FallbackFactory<CourseClient
 
             @Override
             public List<CourseSimpleInfoDTO> queryAllSimpleInfo() {
+                return List.of();
+            }
+
+            @Override
+            public List<CourseSimpleInfoDTO> queryPortalCourses(String keyword, String sort, Integer limit) {
+                log.warn("course-service 不可用，queryPortalCourses(keyword={}, sort={}) 降级返回空列表", keyword, sort);
+                return List.of();
+            }
+
+            @Override
+            public List<CourseCatalogueDTO> queryCatalogueList(List<Long> ids) {
+                return List.of();
+            }
+
+            @Override
+            public List<CourseCatalogueDTO> queryCataloguesByCourse(Long courseId) {
                 return List.of();
             }
         };

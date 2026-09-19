@@ -1,22 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCourse } from '@/api/course'
-import { placeOrder } from '@/api/trade'
-import { myCoupons } from '@/api/promotion'
+import { mockPayOrder, placeOrder, removeFromCart, boughtCourseIds } from '@/api/trade'
+import { useMyCoupons } from '@/composables/useMyCoupons'
 import { formatPrice, ORDER_STATUS } from '@/utils/format'
-import type { CourseVO, UserCouponVO } from '@/types/api'
+import type { CourseVO, Id } from '@/types/api'
 
 const route = useRoute()
 const router = useRouter()
+
+/** 可用（未使用）优惠券：与「优惠券中心」共用同一份全局状态，用券后两边实时联动 */
+const { usableCoupons: coupons, refresh: refreshCoupons, markUsed } = useMyCoupons()
 
 const courseIds = computed(() =>
   (route.query.courseIds as string || '').split(',').map(Number).filter(Boolean)
 )
 const courses = ref<CourseVO[]>([])
-const coupons = ref<UserCouponVO[]>([])
-const selectedCouponId = ref<number | undefined>()
+/** 选中的用户券行 id（雪花 id 为字符串，见 types/api.ts 的 Id） */
+const selectedCouponId = ref<Id | undefined>()
 const submitting = ref(false)
 const loading = ref(true)
 
@@ -25,7 +28,7 @@ const canUseCoupon = computed(() => courses.value.length === 1)
 
 /** 选中的用户券对单门课程的最大可抵金额（按后端固定面值核销 deduction=price-totalFee） */
 function discountOf(course: CourseVO): number {
-  const uc = coupons.value.find((c) => c.id === selectedCouponId.value)
+  const uc = coupons.value.find((c) => String(c.id) === String(selectedCouponId.value))
   if (!uc) return 0
   const price = course.price ?? 0
   if (price <= 0) return 0
@@ -43,8 +46,26 @@ async function init() {
   loading.value = true
   try {
     const details = await Promise.all(courseIds.value.map((id) => getCourse(id)))
-    courses.value = details
-    coupons.value = (await myCoupons()).filter((c) => c.status === 1)
+    // 防误购：过滤当前学员已拥有的课程（从旧购物车/历史链接进入结算页的场景）
+    const ownedIds = await boughtCourseIds()
+      .then((ids) => new Set(ids.map(String)))
+      .catch(() => new Set<string>())
+    const fresh = details.filter((c) => !ownedIds.has(String(c.id)))
+    if (fresh.length < details.length) {
+      ElMessage.warning(
+        details.length - fresh.length === 1
+          ? '「' + details.find((c) => ownedIds.has(String(c.id)))?.name + '」已在你的课程库中，已自动移出'
+          : `所选课程中 ${details.length - fresh.length} 门已拥有，已自动移出`,
+      )
+    }
+    if (!fresh.length) {
+      ElMessage.info('所选课程均已拥有，可直接前往学习中心开始学习')
+      router.replace('/learning')
+      return
+    }
+    courses.value = fresh
+    // 可用券取自全局单例（券中心用掉后会立即同步，不会出现"券已用还列在可选里"）
+    await refreshCoupons()
     // 多课程时不允许用券（后端逐课一单，一张券只能用于一单）
     if (!canUseCoupon.value) selectedCouponId.value = undefined
   } catch {
@@ -54,26 +75,105 @@ async function init() {
   }
 }
 
-/** 提交订单（后端：每门课程一张订单 + 雪花单号 + 本地消息表 + 15 分钟超时关单） */
+/** 支付成功提示；用户点「开始学习」返回 true（跳转学习中心），关闭/取消返回 false */
+function alertPaidSuccess(count = 1) {
+  return ElMessageBox.alert(
+    count > 1
+      ? `已成功支付 ${count} 笔订单，课程已开通，可在「学习中心」开始学习。`
+      : '支付成功，课程已开通，可在「学习中心」开始学习。',
+    '支付成功',
+    { type: 'success', confirmButtonText: '开始学习' },
+  )
+    .then(() => true)
+    .catch(() => false)
+}
+
+/** 立即支付：逐笔走 Mock 支付通道（后端复用真实回调链路，流水幂等）。导航在内部完成： */
+/** 全部支付成功 → 弹窗确认后跳学习中心或订单列表；全部失败返回 false（留在待支付单） */
+async function payNow(orderIds: Id[]) {
+  let paid = 0
+  for (const id of orderIds) {
+    try {
+      await mockPayOrder(id)
+      paid++
+    } catch {
+      /* 单笔失败继续，最后统一提示 */
+    }
+  }
+  if (paid === 0) {
+    ElMessage.error('支付失败，可在「我的订单」中点击继续支付重试')
+    return false
+  }
+  if (paid < orderIds.length) {
+    ElMessage.warning(`已支付 ${paid}/${orderIds.length} 笔，其余可在「我的订单」继续支付`)
+  }
+  const goLearn = await alertPaidSuccess(paid)
+  // 支付成功事件已异步开课（zx-learning 消费），进入学习中心即拉取最新课表
+  await router.replace(goLearn ? '/learning' : '/trade/orders?status=2')
+  return true
+}
+
+/**
+ * 提交订单：后端每门课程生成一张订单（雪花单号 + 15 分钟超时关单）。
+ * 下单成功后弹出「是否立即支付」：立即支付直接完成支付，稍后支付保持待支付态。
+ */
 async function onSubmit() {
-  if (!courses.value.length) return
+  // 防重入：按钮 loading 态之外再兜一层（键盘回车/快速连点）
+  if (!courses.value.length || submitting.value) return
   submitting.value = true
   try {
-    // 选中的用户券：couponId 传“券模板 id”，userCouponId 传“用户券行 id”，与后端下单/核销契约对齐
-    const uc = coupons.value.find((c) => c.id === selectedCouponId.value)
+    // 选中的用户券：couponId 传"券模板 id"，userCouponId 传"用户券行 id"，与后端下单/核销契约对齐
+    const uc = coupons.value.find((c) => String(c.id) === String(selectedCouponId.value))
+    const orderIds: Id[] = []
     for (const course of courses.value) {
-      await placeOrder({
+      const orderId = await placeOrder({
         courseId: course.id,
         // 实付金额：无券 = 课程价（后端默认）；有券 = 课程价 - 抵扣，供后端做金额一致性校验
         totalFee: course.price - discountOf(course),
         couponId: uc?.couponId,
         userCouponId: uc?.id,
       })
+      orderIds.push(orderId)
     }
-    ElMessage.success(`下单成功！订单将在 15 分钟后超时自动关闭`)
-    await router.replace(`/trade/orders?pending=1`)
+
+    // 用券成功：立即把该券置为"已使用"，券中心/统计同步更新（随后刷新与服务端对齐）。
+    // 后端也在下单核销后同步回写了券状态，此处是同一事实的前端即时呈现。
+    if (uc) {
+      markUsed(uc.id)
+      selectedCouponId.value = undefined
+    }
+
+    // 下单成功即从购物车移除（不在购物车中时为幂等空操作）
+    await Promise.all(courses.value.map((c) => removeFromCart(c.id).catch(() => null)))
+
+    // 是否立即支付
+    let payNowChosen = false
+    try {
+      await ElMessageBox.confirm(
+        `订单已创建（共 ${orderIds.length} 笔）。立即支付即可开通课程；也可稍后支付，订单将在 15 分钟后超时自动关闭。`,
+        '是否立即支付？',
+        {
+          type: 'success',
+          confirmButtonText: '立即支付',
+          cancelButtonText: '稍后支付',
+          distinguishCancelAndClose: true,
+        },
+      )
+      payNowChosen = true
+    } catch {
+      payNowChosen = false
+    }
+
+    if (payNowChosen) {
+      const ok = await payNow(orderIds)
+      if (ok) return // 成功路径的导航已在 payNow 内完成（学习中心 / 订单列表）
+      await router.replace('/trade/orders?pending=1')
+      return
+    }
+    ElMessage.info('已保留待支付订单，可在「我的订单」中继续支付')
+    await router.replace('/trade/orders?pending=1')
   } catch {
-    /* ignore */
+    /* 全局拦截器已提示 */
   } finally {
     submitting.value = false
   }
@@ -136,7 +236,7 @@ void ORDER_STATUS
             :key="c.id"
             class="zx-coupon-option flex cursor-pointer items-center justify-between rounded-xl border-2 p-4 transition-colors"
             :class="{
-              'zx-coupon-option--active': selectedCouponId === c.id,
+              'zx-coupon-option--active': String(selectedCouponId) === String(c.id),
               'zx-coupon-option--disabled': !canUseCoupon,
             }"
             @click="canUseCoupon && (selectedCouponId = c.id)"
@@ -184,7 +284,8 @@ void ORDER_STATUS
           {{ submitting ? '下单中…' : '提交订单' }}
         </el-button>
         <p class="zx-text-secondary mt-3 text-xs leading-5">
-          下单成功后请于 15 分钟内完成支付，超时订单将自动关闭并释放优惠券。
+          提交后会询问是否立即支付；选择稍后支付则订单保持待支付状态，请在 15 分钟内完成支付，
+          超时订单将自动关闭并释放优惠券。
         </p>
       </div>
     </div>

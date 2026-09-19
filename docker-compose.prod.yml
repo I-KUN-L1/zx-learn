@@ -1,0 +1,486 @@
+# =====================================================================
+# 知行智学（zx-learn）· 生产/预发编排（容器化）
+#
+# 与 docker-compose.yml（仅基础设施，供本机开发用）的区别：
+#   * 这里连**业务服务一起**编排，共 16 个服务 + 4 类中间件，同处一个自定义网络；
+#   * **只有网关对外发布端口**（8080）；其余服务只在集群内可达，不经宿主机暴露，
+#     避免有人绕过网关直连业务服务（网关是鉴权、限流、CORS 的唯一入口）；
+#   * 中间件与业务服务均带 healthcheck，业务服务按依赖顺序启动（service_healthy）；
+#   * 服务间地址通过环境变量注入（MYSQL_HOST=mysql / GW_AUTH_URI=http://zx-auth:8081 …），
+#     不再依赖"localhost"——容器内的 localhost 不是宿主机。
+#
+# 用法：
+#   1) 准备 .env（cp .env.example .env 并填写真实凭据；务必替换 ZX_JWT_SECRET 与 PAY_CALLBACK_SECRET）
+#   2) 在宿主机初始化数据库结构：bash scripts/db-migrate.sh   （或让 mysql 容器首启执行 init.sql）
+#   3) 构建并启动：docker compose -f docker-compose.prod.yml up -d --build
+#   4) 验收：curl -s http://<host>:8080/courses/page?pageNo=1&pageSize=5
+#
+# 前置条件：先在本机执行过一次 maven 打包（各模块 target/<module>.jar 已产出）——
+# Dockerfile 直接 ADD 该 jar，不在镜像内编译。
+# =====================================================================
+
+# ---------- 业务服务通用环境（各服务 environment 段用 <<: *app-env 引入） ----------
+x-app-env: &app-env
+  TZ: Asia/Shanghai
+  # 中间件统一走容器服务名（覆盖 .env 里给本机用的 localhost）
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
+  POSTGRES_URL: jdbc:postgresql://postgres:5432/zx_aigc
+  # 不启用 Nacos：各服务走 SimpleDiscoveryClient 静态实例直连。
+  # ⚠ 关键：静态实例地址必须在这里覆盖成**容器服务名**——
+  #   application.yml 里的默认值是 http://localhost:808x，容器内的 localhost 是容器自身，
+  #   不覆盖会导致全部跨服务 Feign 调用打到自己身上（连接被拒 / 503 被 fail-open 吞掉，
+  #   表现为"券状态永远未使用""管理端看不到下单用户"等静默故障）。
+  #   多实例 / 滚动发布请改 NACOS_ENABLED=true 并部署注册中心（见 docs/DEPLOYMENT.md 第 4 节）。
+  NACOS_ENABLED: "false"
+  NACOS_CONFIG_ENABLED: "false"
+  SVC_AUTH_URI: http://zx-auth:8081
+  SVC_USER_URI: http://zx-user:8082
+  SVC_COURSE_URI: http://zx-course:8083
+  SVC_EXAM_URI: http://zx-exam:8084
+  SVC_MEDIA_URI: http://zx-media:8085
+  SVC_LEARNING_URI: http://zx-learning:8086
+  SVC_TRADE_URI: http://zx-trade:8087
+  SVC_PROMOTION_URI: http://zx-promotion:8088
+  SVC_AIGC_URI: http://zx-aigc:8089
+  SVC_PAY_URI: http://zx-pay:8090
+  SVC_SEARCH_URI: http://zx-search:8091
+  SVC_REMARK_URI: http://zx-remark:8092
+  SVC_MESSAGE_URI: http://zx-message:8093
+  SVC_DATA_URI: http://zx-data:8094
+  SVC_INSIGHT_URI: http://zx-insight:8095
+
+x-app-defaults: &app-defaults
+  restart: always
+  env_file: [.env]
+  networks: [zx-net]
+
+services:
+  # =====================================================================
+  # 一、中间件
+  # =====================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: zx-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中配置 MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Shanghai
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - zx-mysql-data:/var/lib/mysql
+      - ./deploy/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+      # 全新卷首次启动会自动执行；已有数据卷不会重复执行（幂等迁移请用 scripts/db-migrate.sh）
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks: [zx-net]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  redis:
+    image: redis:7
+    container_name: zx-redis
+    restart: always
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:?请在 .env 中配置 REDIS_PASSWORD}
+    volumes:
+      - zx-redis-data:/data
+      - ./deploy/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks: [zx-net]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$(cat /proc/1/environ | tr '\\0' '\\n' | grep '^REDIS_PASSWORD' | cut -d= -f2) ping | grep -q PONG || redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: zx-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中配置 POSTGRES_PASSWORD}
+      POSTGRES_DB: zx_aigc
+      TZ: Asia/Shanghai
+    volumes:
+      - zx-pg-data:/var/lib/postgresql/data
+      - ./deploy/pgvector/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks: [zx-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d zx_aigc"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:4.9.7
+    container_name: zx-mq-namesrv
+    restart: always
+    command: sh mqnamesrv
+    networks: [zx-net]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9876' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  rocketmq-broker:
+    image: apache/rocketmq:4.9.7
+    container_name: zx-mq-broker
+    restart: always
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_healthy
+    environment:
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+      # 规避 JDK8 在 cgroup v2（Docker Desktop/WSL2）下 OperatingSystemMXBean NPE
+      # 导致 StoreUtil.<clinit> 失败、消费位点查询全挂的已知问题
+      JAVA_OPT_EXT: "-XX:-UseContainerSupport"
+    volumes:
+      - ./deploy/rocketmq/broker.conf:/home/rocketmq/rocketmq-4.9.7/conf/broker.conf:ro
+    command: sh mqbroker -c /home/rocketmq/rocketmq-4.9.7/conf/broker.conf
+    networks: [zx-net]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10911' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  # =====================================================================
+  # 二、网关（唯一对外暴露端口的服务）
+  # =====================================================================
+  zx-gateway:
+    <<: *app-defaults
+    build:
+      context: .
+      args: { APP_NAME: zx-gateway }
+    image: zx-learn/zx-gateway:${ZX_VERSION:-latest}
+    container_name: zx-gateway
+    environment:
+      <<: *app-env
+      # 下游路由改为容器服务名（不启用 Nacos 时生效）
+      GW_AUTH_URI: http://zx-auth:8081
+      GW_USER_URI: http://zx-user:8082
+      GW_COURSE_URI: http://zx-course:8083
+      GW_EXAM_URI: http://zx-exam:8084
+      GW_MEDIA_URI: http://zx-media:8085
+      GW_LEARNING_URI: http://zx-learning:8086
+      GW_TRADE_URI: http://zx-trade:8087
+      GW_PROMOTION_URI: http://zx-promotion:8088
+      GW_AIGC_URI: http://zx-aigc:8089
+      GW_PAY_URI: http://zx-pay:8090
+      GW_SEARCH_URI: http://zx-search:8091
+      GW_REMARK_URI: http://zx-remark:8092
+      GW_MESSAGE_URI: http://zx-message:8093
+      GW_DATA_URI: http://zx-data:8094
+      GW_INSIGHT_URI: http://zx-insight:8095
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # =====================================================================
+  # 三、业务服务（仅集群内可达，不发布宿主机端口）
+  # =====================================================================
+  zx-auth:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-auth } }
+    image: zx-learn/zx-auth:${ZX_VERSION:-latest}
+    container_name: zx-auth
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8081' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-user:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-user } }
+    image: zx-learn/zx-user:${ZX_VERSION:-latest}
+    container_name: zx-user
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8082' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-course:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-course } }
+    image: zx-learn/zx-course:${ZX_VERSION:-latest}
+    container_name: zx-course
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8083' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-exam:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-exam } }
+    image: zx-learn/zx-exam:${ZX_VERSION:-latest}
+    container_name: zx-exam
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8084' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-media:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-media } }
+    image: zx-learn/zx-media:${ZX_VERSION:-latest}
+    container_name: zx-media
+    environment:
+      <<: *app-env
+      # 未配置 OSS 时本地兜底目录（需持久化，否则重启后图片丢失）
+      MEDIA_LOCAL_DIR: /data/media
+    volumes:
+      - zx-media-data:/data/media
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8085' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-learning:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-learning } }
+    image: zx-learn/zx-learning:${ZX_VERSION:-latest}
+    container_name: zx-learning
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rocketmq-broker: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8086' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-trade:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-trade } }
+    image: zx-learn/zx-trade:${ZX_VERSION:-latest}
+    container_name: zx-trade
+    environment:
+      <<: *app-env
+      # 订单/支付回调验签密钥必填：缺失时 zx-trade 启动即失败（fail-fast）
+      PAY_CALLBACK_SECRET: ${PAY_CALLBACK_SECRET:?请在 .env 中配置 PAY_CALLBACK_SECRET}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rocketmq-broker: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8087' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-promotion:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-promotion } }
+    image: zx-learn/zx-promotion:${ZX_VERSION:-latest}
+    container_name: zx-promotion
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rocketmq-broker: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8088' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-aigc:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-aigc } }
+    image: zx-learn/zx-aigc:${ZX_VERSION:-latest}
+    container_name: zx-aigc
+    environment: { <<: *app-env }
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8089' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-pay:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-pay } }
+    image: zx-learn/zx-pay:${ZX_VERSION:-latest}
+    container_name: zx-pay
+    environment:
+      <<: *app-env
+      # 与 zx-trade 同源：渠道回调验签密钥。缺失时回调 fail-closed 拒绝（501），不会误判为支付成功
+      PAY_CALLBACK_SECRET: ${PAY_CALLBACK_SECRET:?请在 .env 中配置 PAY_CALLBACK_SECRET}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8090' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-search:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-search } }
+    image: zx-learn/zx-search:${ZX_VERSION:-latest}
+    container_name: zx-search
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8091' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-remark:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-remark } }
+    image: zx-learn/zx-remark:${ZX_VERSION:-latest}
+    container_name: zx-remark
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8092' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-message:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-message } }
+    image: zx-learn/zx-message:${ZX_VERSION:-latest}
+    container_name: zx-message
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8093' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-data:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-data } }
+    image: zx-learn/zx-data:${ZX_VERSION:-latest}
+    container_name: zx-data
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8094' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  zx-insight:
+    <<: *app-defaults
+    build: { context: ., args: { APP_NAME: zx-insight } }
+    image: zx-learn/zx-insight:${ZX_VERSION:-latest}
+    container_name: zx-insight
+    environment: { <<: *app-env }
+    depends_on:
+      mysql: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8095' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  # =====================================================================
+  # 三、前端站点（Nginx：静态资源 + /api 反向代理到网关）
+  #
+  # 为什么需要它：前端生产构建的 VITE_API_BASE_URL=/api，而网关路由不含 /api 前缀；
+  # zx-web/nginx.conf 的 `proxy_pass http://zx-gateway:8080/;`（末尾斜杠）负责剥离前缀。
+  # 没有这一层，部署后前端所有接口都会 404（上线审查发现的缺口）。
+  #
+  # 注意：本服务**不注入 .env**（无需任何密钥），仅托管静态资源并反代，减少凭据暴露面。
+  # =====================================================================
+  zx-web:
+    build:
+      context: ./zx-web
+    image: zx-learn/zx-web:${ZX_VERSION:-latest}
+    container_name: zx-web
+    restart: always
+    ports:
+      - "${WEB_BIND_PORT:-80}:80"
+    networks: [zx-net]
+    depends_on:
+      zx-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+networks:
+  zx-net:
+    driver: bridge
+
+volumes:
+  zx-mysql-data:
+  zx-redis-data:
+  zx-pg-data:
+  zx-media-data:

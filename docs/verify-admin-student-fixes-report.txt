@@ -1,0 +1,108 @@
+=====================================================================
+知行智学 ZhiXing Learn · 管理员端/学员端四项修复 验证报告
+生成时间: 2026-09-18 18:43:13
+网关地址: http://localhost:8080
+=====================================================================
+
+=== 一、环境与构建产物 ===
+  [PASS] zx-user fat jar 存在
+  [PASS] zx-course fat jar 存在
+  [PASS] zx-auth fat jar 存在
+  [PASS] zx-learning fat jar 存在
+  [PASS] zx-exam fat jar 存在
+  [PASS] zx-trade fat jar 存在
+  [PASS] zx-insight fat jar 存在
+  [PASS] zx-gateway fat jar 存在
+  [PASS] 前端构建产物存在
+  [PASS] trade_order.user_deleted 列已就位
+  [PASS] trade_order.idx_user_status 索引已就位
+
+=== 二、服务就绪检查（复用模式）===
+  [PASS] zx-user 已在运行 (8082)
+  [PASS] zx-course 已在运行 (8083)
+  [PASS] zx-auth 已在运行 (8081)
+  [PASS] zx-learning 已在运行 (8086)
+  [PASS] zx-exam 已在运行 (8084)
+  [PASS] zx-trade 已在运行 (8087)
+  [PASS] zx-insight 已在运行 (8095)
+  [PASS] zx-gateway 已在运行 (8080)
+  [PASS] 学员登录 13900000001/123456
+  [PASS] 取到学员 2001 的已拥有课程 id=1
+  [PASS] 夹具订单已入库（8 笔）
+  [PASS] 历史关单流水已预置
+
+=== 三、管理员端：账号注册时间（需求 1）===
+  [PASS] 管理员登录 13800000001/123456
+  [PASS] GET /users/page 返回 200
+  [PASS] 用户列表非空
+  [PASS] 列表首条含 createTime 字段
+  [PASS] createTime 非空（注册时间已下发）
+  [PASS] createTime 格式为 yyyy-MM-dd HH:mm:ss（19 位）
+  [PASS] 全部列表项 createTime 均非空
+
+=== 四、学员端学情报告（需求 2）===
+  [PASS] GET /insight/profiles/mine 返回 200
+  [PASS] 能力画像不含「系统繁忙」
+  [PASS] 能力维度 5 项
+  [PASS] 近 7 日趋势 7 项
+  [PASS] 累计学习时长已下发
+  [PASS] 连续打卡天数已下发
+  [PASS] GET /insight/reports/latest 返回 200
+  [PASS] 学情报告 5 个维度齐备
+  [PASS] 报告正文(summary)非空
+  [PASS] 报告日期为今天
+  [PASS] GET /insight/learning-path 返回 200
+  [PASS] 学习路径推荐理由非空
+  [PASS] 无数据学员 /insight/profiles/mine 仍返回 200（不报系统繁忙）
+  [PASS] 无数据学员 /insight/reports/latest 仍返回 200（不报系统繁忙）
+  [PASS] 无数据学员 /insight/learning-path 仍返回 200（不报系统繁忙）
+  [PASS] LLM 接口路径推断为智谱 /chat/completions
+
+=== 五、我的订单：状态流转修复（需求 3）===
+  [PASS] 夹具：已拥有课程待支付单初始为待支付
+  [PASS] GET /orders/page?status=1（待支付）返回 200
+  [PASS] 已拥有课程的僵尸单已被自动关闭
+  [PASS] 待支付列表中不再出现已拥有课程的订单
+  [PASS] 待支付列表全部订单的课程均非「已拥有」
+  [PASS] 夹具：被历史流水毒化的待支付单存在
+  [PASS] 带历史关单流水的订单仍可关单（旧实现被锁死）
+  [PASS] 该订单状态已变为已关闭
+  [PASS] 重复关单幂等返回 200
+  [PASS] 重复关单后状态仍为已关闭
+  [PASS] 状态回退为待支付后仍能再次关单
+  [PASS] 再次关单后状态为已关闭
+  [PASS] 夹具：超时待支付单已复位为待支付
+  [PASS] 超时（>15 分钟）待支付单已自动关闭
+
+=== 六、订单删除：学员端软删 + 管理端清理（需求 4）===
+  [PASS] 学员删除已关闭订单返回 200
+  [PASS] 订单被标记为学员已删除（user_deleted=1）
+  [PASS] 记录未被物理删除（管理端可追溯）
+  [PASS] 学员删除已支付订单返回 200
+  [PASS] 已支付订单标记学员已删除
+  [PASS] 学员删除待支付订单被拒（非 200）
+  [PASS] 拒绝原因提示先支付或取消
+  [PASS] 学员删除退款中订单被拒（非 200）
+  [PASS] 学员端列表已隐藏软删的已关闭订单
+  [PASS] 学员端列表已隐藏软删的已支付订单
+  [PASS] 管理端仍可检索到学员已删除的订单
+  [PASS] 管理端可见 userDeleted=1 标记
+  [PASS] 管理端删除待支付订单返回 200
+  [PASS] 管理端列表不再展示该订单
+  [PASS] 管理端按订单号检索已删除订单返回 0 条
+  [PASS] 管理端删除已支付订单被拒（非 200）
+  [PASS] 拒绝原因提示已支付参与销售统计
+  [PASS] 该已支付订单未被删除
+  [PASS] 删除操作不影响销售额统计
+  [PASS] 管理端统计接口销售额与库内一致
+  [PASS] 测试夹具已清理干净
+  [PASS] 关单流水夹具已清理
+
+=== 七、汇总 ===
+  断言总数: 82   通过: 82   失败: 0
+  结论: 全部通过 ✅
+
+---------------------------------------------------------------------
+原始响应报文目录: logs/verify-fixes/
+服务启动日志目录: logs/verify-fixes/svc-*.log
+---------------------------------------------------------------------

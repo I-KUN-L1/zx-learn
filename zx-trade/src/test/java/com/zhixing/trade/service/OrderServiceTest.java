@@ -24,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -55,7 +56,12 @@ class OrderServiceTest {
     @Mock
     private TradeCouponService tradeCouponService;
     @Mock
+    private CouponStatusSyncer couponStatusSyncer;
+    @Mock
     private RocketMQTemplate rocketMQTemplate;
+    /** 下单互斥锁 / 券库存都在 Redis 上：必须显式 mock，否则锁释放路径会 NPE */
+    @Mock
+    private StringRedisTemplate redisTemplate;
     @Mock
     private IdempotencyGuard idempotencyGuard;
 
@@ -122,6 +128,8 @@ class OrderServiceTest {
         verify(tradeCouponService).deductStock(eq(9L), eq(1L), anyInt(), anyInt());
         verify(orderMsgService).enqueue(eq(id), eq("couponUse"),
                 eq(MqTopics.TOPIC_COUPON_USE), eq(MqTopics.Tags.COUPON_USE), any(CouponMsg.class));
+        // 券状态同步：下单后回写"已使用"，保证券列表与核销结果一致
+        verify(couponStatusSyncer).syncUsedAfterCommit(eq(88L), eq(1L), eq(9L), eq(id));
     }
 
     @Test
@@ -178,7 +186,6 @@ class OrderServiceTest {
 
     @Test
     void closeExpiredCancelsAndRestoresCouponAndQuota() {
-        when(idempotencyGuard.tryConsume(any(), any(), any())).thenReturn(true);
         Order order = new Order();
         order.setId(1L);
         order.setUserId(1L);
@@ -194,6 +201,8 @@ class OrderServiceTest {
         verify(orderMsgService).enqueue(eq(1L), eq("couponRefund"),
                 eq(MqTopics.TOPIC_COUPON_USE), eq(MqTopics.Tags.COUPON_REFUND), any(CouponMsg.class));
         verify(tradeCouponService).restoreStock(eq(9L), eq(1L), anyInt());
+        // 券状态同步：关单后回写"未使用"，避免券被已关闭的订单永久占住
+        verify(couponStatusSyncer).syncRefundedAfterCommit(eq(1L));
         // 关单补偿：释放课程名额
         verify(orderMsgService).enqueue(eq(1L), eq("quotaRelease"),
                 eq(MqTopics.TOPIC_COURSE_QUOTA), eq(MqTopics.Tags.QUOTA_RELEASE), any());
@@ -201,7 +210,6 @@ class OrderServiceTest {
 
     @Test
     void closeExpiredSkipsAlreadyPaidOrder() {
-        when(idempotencyGuard.tryConsume(any(), any(), any())).thenReturn(true);
         Order order = new Order();
         order.setId(1L);
         order.setStatus(1);
@@ -213,13 +221,18 @@ class OrderServiceTest {
     }
 
     @Test
-    void closeExpiredIdempotentWhenConsumeKeyExists() {
-        when(idempotencyGuard.tryConsume(any(), any(), any())).thenReturn(false);
+    void closeExpiredIsIdempotentOnRepeat() {
+        // 幂等语义：关单是可重入的对账动作，靠「条件更新」而非一次性消费流水保证幂等。
+        // 第二次调用时订单已是已关闭状态 → 入口直接返回，不再更新、不再补偿。
+        Order closed = new Order();
+        closed.setId(1L);
+        closed.setStatus(OrderService.STATUS_CLOSED);
+        when(orderMapper.selectById(1L)).thenReturn(closed);
 
         service.closeExpired(1L);
 
-        verify(orderMapper, never()).selectById(anyLong());
         verify(orderMapper, never()).update(any(), any());
+        verify(orderMsgService, never()).enqueue(anyLong(), any(), any(), any(), any());
     }
 
     @Test
@@ -270,7 +283,6 @@ class OrderServiceTest {
     void closeExpiredSkipsCompensationWhenConditionalUpdateMisses() {
         // 竞态防护：预检时待支付，但条件更新前状态被支付回调改变（rows=0），
         // 此时严禁退券/释放名额，否则已支付订单会被错误补偿
-        when(idempotencyGuard.tryConsume(any(), any(), any())).thenReturn(true);
         Order order = new Order();
         order.setId(1L);
         order.setUserId(1L);
@@ -285,6 +297,8 @@ class OrderServiceTest {
         verify(orderMapper).update(any(), any());
         verify(orderMsgService, never()).enqueue(anyLong(), any(), any(), any(), any());
         verify(tradeCouponService, never()).restoreStock(anyLong(), anyLong(), anyInt());
+        // 券状态也不能被退回：订单实际上已支付，券必须保持"已使用"
+        verify(couponStatusSyncer, never()).syncRefundedAfterCommit(anyLong());
     }
 
     // ==================== 管理端看板：交易统计聚合 ====================

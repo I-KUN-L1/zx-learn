@@ -2,13 +2,15 @@ package com.zhixing.learning.controller;
 
 import com.zhixing.common.annotation.RequireRole;
 import com.zhixing.common.constants.UserRole;
+import com.zhixing.common.domain.PageDTO;
+import com.zhixing.common.domain.PageQuery;
 import com.zhixing.common.domain.R;
 import com.zhixing.learning.domain.po.Note;
 import com.zhixing.learning.service.NoteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.util.Map;
 
 /**
  * 学习笔记。
@@ -44,7 +46,9 @@ public class NoteController {
 
     @GetMapping("/page")
     @RequireRole(UserRole.STUDENT)
-    public R<List<Note>> page() {
-        return R.ok(noteService.page());
+    public R<PageDTO<Map<String, Object>>> page(PageQuery query,
+                                                @RequestParam(required = false) Long courseId,
+                                                @RequestParam(required = false) Long lessonId) {
+        return R.ok(noteService.page(query, courseId, lessonId));
     }
 }

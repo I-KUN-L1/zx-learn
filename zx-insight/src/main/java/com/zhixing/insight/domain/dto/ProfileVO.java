@@ -3,19 +3,63 @@ package com.zhixing.insight.domain.dto;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.util.Map;
+import java.util.List;
 
 /**
- * 能力画像 VO（雷达图数据）
+ * 能力画像 VO（对齐前端 InsightProfileVO 契约）。
+ * 雷达图能力维度 + 近 7 日学习时长趋势 + 总览指标。
  */
 @Data
 public class ProfileVO implements Serializable {
 
     private Long userId;
 
-    /** 学习等级 */
-    private String level;
+    /** 累计学习时长（分钟） */
+    private long totalDuration;
 
-    /** 多维度评分：{学习投入度:xx, 学习完成度:xx, 答题能力:xx, 知识广度:xx, 综合理解力:xx} */
-    private Map<String, Integer> dimensions;
+    /** 课程完成率（百分比） */
+    private int completedRate;
+
+    /** 连续打卡天数 */
+    private int continuousDays;
+
+    /** 能力维度雷达图数据 */
+    private List<AbilityDTO> abilities;
+
+    /** 近 7 日学习时长趋势（分钟） */
+    private List<TrendDTO> trends;
+
+    /**
+     * 能力维度项：{name, value(0-100)}
+     */
+    @Data
+    public static class AbilityDTO implements Serializable {
+        private String name;
+        private Integer value;
+
+        public AbilityDTO() {
+        }
+
+        public AbilityDTO(String name, Integer value) {
+            this.name = name;
+            this.value = value;
+        }
+    }
+
+    /**
+     * 趋势项：{date(M/d), duration(分钟)}
+     */
+    @Data
+    public static class TrendDTO implements Serializable {
+        private String date;
+        private Long duration;
+
+        public TrendDTO() {
+        }
+
+        public TrendDTO(String date, Long duration) {
+            this.date = date;
+            this.duration = duration;
+        }
+    }
 }

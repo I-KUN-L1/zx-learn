@@ -43,8 +43,22 @@ public class LlmProperties {
     private boolean enabled = false;
 
     /** Embedding 模型名（如 text-embedding-3-small） */
-    private String embeddingModel = "text-embedding-3-small";
+    private String embeddingModel = "embedding-3";
+
+    /**
+     * 相对 {@link #baseUrl} 的向量化接口路径。
+     *
+     * <p>必须与厂商实际的 base-url 组合后成立，否则会拼出「多一段前缀」的 404 地址：
+     * <ul>
+     *   <li>{@code baseUrl=https://api.openai.com} + {@code v1/embeddings} → /v1/embeddings ✅</li>
+     *   <li>{@code baseUrl=https://open.bigmodel.cn/api/paas/v4} + {@code embeddings} → /v4/embeddings ✅</li>
+     *   <li>智谱 base-url 配 {@code v1/embeddings} → /v4/v1/embeddings ❌ 404（历史缺陷：路径被写死，
+     *       Embedding 恒定失败并**静默降级**为伪向量，RAG 检索仅剩演示意义且无任何报错）</li>
+     * </ul>
+     * 因此与 {@code chatPath} 一样做成可配置项。
+     */
+    private String embeddingPath = "embeddings";
 
     /** Embedding 向量维度，需与 knowledge_chunk.embedding 列（vector 维度）一致 */
-    private int embeddingDimension = 1536;
+    private int embeddingDimension = 1024;
 }

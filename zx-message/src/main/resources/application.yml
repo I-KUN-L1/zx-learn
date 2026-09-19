@@ -20,7 +20,8 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
-        enabled: false
+        # 关闭 Nacos 时靠各服务下方的 static simple.instances 直连；生产置 NACOS_ENABLED=true 并指向注册中心
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: ${NACOS_ENABLED:false}
       config:
-        enabled: false
+        enabled: ${NACOS_CONFIG_ENABLED:false}

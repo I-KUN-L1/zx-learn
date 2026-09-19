@@ -1,20 +1,38 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
-import { Back, DataLine, Notebook, User } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { ArrowDown, Back, ChatDotRound, DataLine, List, Notebook, User } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
+const { handleLogout } = useAuth()
+
+/** 头像下拉：个人中心（积分/排行榜）对全角色开放 */
+async function onDropdownCommand(cmd: string) {
+  if (cmd === 'logout') {
+    await handleLogout()
+    ElMessage.success('已退出登录')
+    return
+  }
+  router.push(cmd)
+}
 
 /**
  * 管理端菜单对所有人可见：真正的权限由后端接口鉴权，
  * 无权限用户访问后接口返回 403 并跳转 403 页。
+ * AI 助教：后端 /chat 等接口仅要求登录、不限角色，管理员本就可用，
+ * 此前只有门户顶部导航有入口，故在控制台内补齐。
  */
 const menus = [
   { path: '/admin/dashboard', label: '数据看板', icon: DataLine },
   { path: '/admin/courses', label: '课程管理', icon: Notebook },
+  { path: '/admin/orders', label: '订单管理', icon: List },
   { path: '/admin/users', label: '用户与权限', icon: User },
+  { path: '/admin/assistant', label: 'AI 助教', icon: ChatDotRound },
 ]
 
 const activeMenu = computed(() => route.path)
@@ -68,8 +86,19 @@ const breadcrumb = computed(() => {
           </el-breadcrumb-item>
         </el-breadcrumb>
         <div class="ml-auto flex items-center gap-3">
-          <el-avatar :size="30" class="zx-ai-avatar">{{ userStore.username?.slice(0, 1) || '知' }}</el-avatar>
-          <span class="text-sm">{{ userStore.username || '知行用户' }}</span>
+          <el-dropdown trigger="click" @command="onDropdownCommand">
+            <span class="flex cursor-pointer items-center gap-2">
+              <el-avatar :size="30" class="zx-ai-avatar">{{ userStore.username?.slice(0, 1) || '知' }}</el-avatar>
+              <span class="text-sm">{{ userStore.username || '知行用户' }}</span>
+              <el-icon class="text-secondary"><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="/profile">个人中心</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </header>
 

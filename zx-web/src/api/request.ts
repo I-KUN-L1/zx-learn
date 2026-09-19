@@ -1,7 +1,7 @@
 import axios, { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import { getToken, setToken, IS_MOCK } from '@/utils/auth'
-import { forceLogout, promptLogin } from '@/utils/loginPrompt'
+import { forceLogout, promptLogin, promptAccountDisabled } from '@/utils/loginPrompt'
 import { mockAdapter } from '@/api/mock/adapter'
 import type { R } from '@/types/api'
 
@@ -164,6 +164,13 @@ async function gotoForbidden() {
   }
 }
 
+/**
+ * 账号被禁用（后端业务码 423）：弹"请联系管理员"提示弹窗。
+ * 独立于 401 分支处理 —— 禁用不是"登录过期"，不能走续期/回跳登录页逻辑，
+ * 否则用户会被反复送回登录页而始终看不到被禁用的原因。
+ */
+const ACCOUNT_DISABLED_CODE = 423
+
 /* ================= 响应拦截器：统一解包 R<T> ================= */
 service.interceptors.response.use(
   async (response: AxiosResponse) => {
@@ -173,6 +180,11 @@ service.interceptors.response.use(
     }
     if (payload.code === 200) {
       return payload.data
+    }
+    // 账号被禁用：给出明确结论 + 处置指引，不参与续期/回跳登录页逻辑
+    if (payload.code === ACCOUNT_DISABLED_CODE) {
+      await promptAccountDisabled(rMessage(payload))
+      return Promise.reject(new Error(rMessage(payload)))
     }
     if (payload.code === 401) {
       const msg = rMessage(payload)
@@ -215,6 +227,12 @@ service.interceptors.response.use(
     return Promise.reject(new Error(rMessage(payload)))
   },
   async (error: AxiosError<R>) => {
+    // 账号被禁用（HTTP 423 或 R 信封 code=423）：统一弹"请联系管理员"提示
+    const disabledBody = error.response?.data
+    if (error.response?.status === ACCOUNT_DISABLED_CODE || disabledBody?.code === ACCOUNT_DISABLED_CODE) {
+      await promptAccountDisabled(disabledBody?.message || disabledBody?.msg)
+      return Promise.reject(error)
+    }
     if (isUnauthorized(null, error)) {
       const msg =
         error.response?.data?.message || error.response?.data?.msg || '登录已过期，请重新登录'
@@ -272,6 +290,13 @@ export const request = {
    */
   delete<T>(url: string, data?: Record<string, unknown>): Promise<T> {
     return service.delete(url, data ? { data } : undefined) as Promise<T>
+  },
+  /**
+   * 下载类请求：返回原始 Blob。
+   * 响应拦截器对非 R 结构（Blob 无 code/data 字段）原样透传，因此无需额外解包。
+   */
+  download(url: string, params?: Record<string, unknown>): Promise<Blob> {
+    return service.get(url, { params, responseType: 'blob' }) as Promise<Blob>
   },
 }
 

@@ -37,6 +37,11 @@ public class CouponService {
     /** 已下架 */
     public static final int STATE_OFF_SHELF = 3;
 
+    /** 普通券（满减券，走常规领券链路） */
+    public static final int TYPE_NORMAL = 1;
+    /** 秒杀券（走 Redis Lua 预扣 + MQ 异步落库链路） */
+    public static final int TYPE_SECKILL = 2;
+
     private final CouponMapper couponMapper;
 
     public Long create(CouponFormDTO form) {

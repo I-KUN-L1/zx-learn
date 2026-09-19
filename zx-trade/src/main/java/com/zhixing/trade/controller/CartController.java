@@ -41,10 +41,27 @@ public class CartController {
         return R.ok();
     }
 
+    /**
+     * 按课程 id 移除购物车条目（对齐前端 removeFromCart(courseId) 契约）
+     */
+    @DeleteMapping("/course/{courseId}")
+    @RequireRole(UserRole.STUDENT)
+    public R<Void> deleteByCourseId(@PathVariable Long courseId) {
+        cartService.deleteByCourseId(courseId);
+        return R.ok();
+    }
+
+    /**
+     * 清空当前用户购物车。兼容空请求体（前端清空按钮不传参）与批量 id 两种调用。
+     */
     @DeleteMapping
     @RequireRole(UserRole.STUDENT)
-    public R<Void> deleteBatch(@RequestBody List<Long> ids) {
-        cartService.deleteBatch(ids);
+    public R<Void> clear(@RequestBody(required = false) List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            cartService.clearMine();
+        } else {
+            cartService.deleteBatch(ids);
+        }
         return R.ok();
     }
 }

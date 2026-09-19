@@ -41,9 +41,20 @@ const EMPTY_PROFILE: InsightProfileVO = {
 
 const EMPTY_PATH: LearningPathVO = { reason: '完成几门课程后为你生成个性化学习路径', steps: [] }
 
+/**
+ * 加载告警：某个子接口失败时不再静默渲染成全 0（容易被误认为"数据本来就是 0"），
+ * 而是显式提示哪一块数据没取到，便于用户刷新重试。
+ */
+const loadWarnings = ref<string[]>([])
+
 onMounted(async () => {
   // allSettled：任一请求失败不阻塞其余请求，保证页面稳定出图、永不卡在 loading
   const [p, lp, rp] = await Promise.allSettled([myProfile(), learningPath(), latestReport()])
+  const warnings: string[] = []
+  if (p.status === 'rejected') warnings.push('能力画像')
+  if (lp.status === 'rejected') warnings.push('学习路径推荐')
+  if (rp.status === 'rejected') warnings.push('最新学情点评')
+
   profile.value = p.status === 'fulfilled' ? (p.value ?? EMPTY_PROFILE) : EMPTY_PROFILE
   path.value = lp.status === 'fulfilled' ? (lp.value ?? EMPTY_PATH) : EMPTY_PATH
   // 后端 ReportVO 无 content 字段，正文取 summary；时间回退为 reportDate
@@ -53,6 +64,7 @@ onMounted(async () => {
     reportVal = { content: v.summary ?? '暂无AI学情点评', createTime: v.reportDate ?? v.createTime ?? '' }
   }
   report.value = reportVal
+  loadWarnings.value = warnings
   loading.value = false
 })
 
@@ -136,77 +148,94 @@ useEcharts(lineEl, lineOption)
       <el-tag type="primary" effect="plain" round>知 · 学 · 行 · 评 · 闭环</el-tag>
     </div>
 
+    <el-alert
+      v-if="loadWarnings.length"
+      class="mb-5"
+      type="warning"
+      show-icon
+      :closable="false"
+      title="部分学情数据暂未取到"
+      :description="`${loadWarnings.join('、')} 加载失败（已用空数据兜底展示）。可稍后刷新页面重试。`"
+    />
+
     <!-- 总览指标卡 -->
     <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
-      <div class="zx-card flex items-center gap-4 p-5">
-        <div class="flex h-12 w-12 items-center justify-center rounded-xl" style="background: var(--zx-primary-bg); color: var(--zx-primary)">
+      <div class="zx-card flex items-center gap-4 overflow-hidden p-5">
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style="background: var(--zx-primary-bg); color: var(--zx-primary)">
           <el-icon :size="24"><Clock /></el-icon>
         </div>
-        <div>
+        <div class="min-w-0">
           <div class="zx-text-secondary text-sm">累计学习时长</div>
-          <div class="text-2xl font-extrabold">{{ profile ? formatMinutes(profile.totalDuration) : '--' }}</div>
+          <div class="truncate text-2xl font-extrabold">{{ profile ? formatMinutes(profile.totalDuration) : '--' }}</div>
         </div>
       </div>
-      <div class="zx-card flex items-center gap-4 p-5">
-        <div class="flex h-12 w-12 items-center justify-center rounded-xl" style="background: var(--zx-primary-bg); color: var(--zx-primary)">
+      <div class="zx-card flex items-center gap-4 overflow-hidden p-5">
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style="background: var(--zx-primary-bg); color: var(--zx-primary)">
           <el-icon :size="24"><TrendCharts /></el-icon>
         </div>
-        <div>
+        <div class="min-w-0">
           <div class="zx-text-secondary text-sm">课程完成率</div>
-          <div class="text-2xl font-extrabold">{{ profile?.completedRate ?? '--' }}%</div>
+          <div class="truncate text-2xl font-extrabold">{{ profile?.completedRate ?? '--' }}%</div>
         </div>
       </div>
-      <div class="zx-card flex items-center gap-4 p-5">
-        <div class="flex h-12 w-12 items-center justify-center rounded-xl" style="background: var(--zx-primary-bg); color: var(--zx-primary)">
+      <div class="zx-card flex items-center gap-4 overflow-hidden p-5">
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style="background: var(--zx-primary-bg); color: var(--zx-primary)">
           <el-icon :size="24"><Medal /></el-icon>
         </div>
-        <div>
+        <div class="min-w-0">
           <div class="zx-text-secondary text-sm">连续打卡</div>
-          <div class="text-2xl font-extrabold">{{ profile?.continuousDays ?? '--' }} 天</div>
+          <div class="truncate text-2xl font-extrabold">{{ profile?.continuousDays ?? '--' }} 天</div>
         </div>
       </div>
     </div>
 
     <!-- 图表区 -->
     <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <div class="zx-card p-5">
+      <div class="zx-card overflow-hidden p-5">
         <h2 class="font-bold">能力画像</h2>
-        <div ref="radarEl" class="mt-2 h-[300px] w-full" />
+        <div ref="radarEl" class="zx-chart-box mt-2 h-[300px]" />
       </div>
-      <div class="zx-card p-5">
+      <div class="zx-card overflow-hidden p-5">
         <h2 class="font-bold">近 7 日学习趋势</h2>
-        <div ref="lineEl" class="mt-2 h-[300px] w-full" />
+        <div ref="lineEl" class="zx-chart-box mt-2 h-[300px]" />
       </div>
     </div>
 
     <!-- 学习路径推荐 + 报告 -->
     <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-      <div class="zx-card p-5 lg:col-span-2">
+      <div class="zx-card min-w-0 overflow-hidden p-5 lg:col-span-2">
         <h2 class="font-bold">学习路径推荐</h2>
-        <p class="zx-text-secondary mt-1 text-sm">{{ path?.reason }}</p>
-        <el-steps v-if="path" direction="vertical" class="mt-5" :active="0" finish-status="finish">
-          <el-step v-for="s in path.steps" :key="s.order" :title="s.courseName" :description="s.reason" status="wait">
-            <template #icon>
-              <div class="zx-step-badge">{{ s.order }}</div>
-            </template>
-          </el-step>
-        </el-steps>
+        <p class="zx-text-secondary mt-1 break-words text-sm">{{ path?.reason }}</p>
+        <!-- 双保险：外层 overflow 隐藏 + 步骤文本强制换行（全局样式已兜底），
+             避免长课程名把卡片撑破（原先表现为图表/内容溢出显示区域） -->
+        <div v-if="path?.steps?.length" class="mt-5 min-w-0">
+          <el-steps direction="vertical" :active="0" finish-status="finish">
+            <el-step v-for="s in path.steps" :key="s.order" :title="s.courseName" :description="s.reason" status="wait">
+              <template #icon>
+                <div class="zx-step-badge">{{ s.order }}</div>
+              </template>
+            </el-step>
+          </el-steps>
+        </div>
+        <div v-else class="zx-text-secondary mt-4 text-sm">完成更多课程后，这里会给出推荐学习顺序。</div>
+
         <div class="mt-2 flex flex-wrap gap-3">
           <el-button
             v-for="s in path?.steps ?? []"
             :key="s.courseId"
+            class="zx-path-btn"
             round
             @click="router.push(`/courses/${s.courseId}`)"
           >
-            {{ s.courseName }}
-            <el-icon class="ml-1"><ArrowRight /></el-icon>
+            <span class="zx-ellipsis">{{ s.courseName }}</span>
+            <el-icon class="ml-1 shrink-0"><ArrowRight /></el-icon>
           </el-button>
         </div>
       </div>
 
-      <div class="zx-card p-5">
+      <div class="zx-card min-w-0 overflow-hidden p-5">
         <h2 class="font-bold">最新学情点评</h2>
-        <p v-if="report" class="zx-text-secondary mt-3 text-sm leading-7">{{ report.content }}</p>
+        <p v-if="report" class="zx-text-secondary mt-3 break-words text-sm leading-7">{{ report.content }}</p>
         <p v-if="report" class="zx-text-secondary mt-3 text-xs">生成时间：{{ report.createTime }}</p>
       </div>
     </div>
@@ -225,6 +254,15 @@ useEcharts(lineEl, lineOption)
   color: #fff;
   font-size: 13px;
   font-weight: 700;
+}
+/* 路径按钮：宽度受容器约束，长课程名省略号截断而非撑破卡片 */
+.zx-path-btn {
+  max-width: 100%;
+}
+.zx-path-btn :deep(span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 :deep(.el-step__title) {
   font-size: 14px;

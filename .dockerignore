@@ -1,0 +1,52 @@
+# =====================================================================
+# Docker 构建上下文裁剪
+# ---------------------------------------------------------------------
+# 镜像只需要 <模块>/target/<模块>.jar 这一个文件，其余全部无需进入上下文。
+# 不裁剪的话构建上下文会包含 zx-web/node_modules、各模块 target/classes 等，
+# 达到数百 MB ~ GB 级，构建既慢又容易触发 Docker Desktop 的上下文传输超时。
+#
+# ⚠ 不要排除 <模块>/target/<模块>.jar —— Dockerfile 的 ADD 依赖它。
+# =====================================================================
+
+# 版本控制 / IDE
+.git
+.gitignore
+.idea
+.vscode
+.trae
+.settings
+*.iml
+
+# 前端（由 Nginx / 独立静态托管，不进后端镜像）
+zx-web
+
+# 文档 / 数据脚本 / 压测 / 本地残留
+docs
+sql
+perf-test
+tmp-covers
+tmp-sse-test.mjs
+
+# 日志与本地运行产物
+logs
+data
+nohup.out
+*.log
+hs_err_pid*.log
+
+# 环境与凭据（绝不进镜像；运行时通过 env_file / environment 注入）
+.env
+.env.*
+!.env.example
+.bootstrap-credentials
+
+# 编译中间产物（保留 target/<模块>.jar）
+**/target/classes
+**/target/test-classes
+**/target/generated-sources
+**/target/generated-test-sources
+**/target/maven-status
+**/target/maven-archiver
+**/target/surefire-reports
+**/target/*.jar.original
+**/*.class

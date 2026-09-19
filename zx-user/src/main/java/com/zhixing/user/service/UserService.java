@@ -17,9 +17,11 @@ import com.zhixing.user.domain.vo.UserVO;
 import com.zhixing.user.mapper.UserDetailMapper;
 import com.zhixing.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -28,15 +30,28 @@ import java.util.stream.Collectors;
 /**
  * 用户服务
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
 
+    /** 用户类型：员工 / 管理员 */
+    private static final int TYPE_STAFF = 1;
+
+    /** 管理员重置密码后的统一初始密码；环境变量 ZX_USER_DEFAULT_PASSWORD 可覆盖 */
+    private static final String FALLBACK_DEFAULT_PASSWORD = "123456";
+
     private final UserMapper userMapper;
     private final UserDetailMapper userDetailMapper;
 
-    /** 管理员重置密码的默认值，由环境变量 ZX_USER_DEFAULT_PASSWORD 注入，不硬编码 */
-    @Value("${ZX_USER_DEFAULT_PASSWORD:}")
+    /**
+     * 管理员重置密码的默认值。
+     * <p>
+     * 优先取环境变量 {@code ZX_USER_DEFAULT_PASSWORD}（已在 .env 中配置为 123456）；
+     * 环境变量缺失时兜底为 {@value #FALLBACK_DEFAULT_PASSWORD}，不再抛"未配置"错误 ——
+     * 重置密码是管理员的高频运维动作，不应因为漏配一个环境变量而不可用。
+     */
+    @Value("${ZX_USER_DEFAULT_PASSWORD:" + FALLBACK_DEFAULT_PASSWORD + "}")
     private String defaultPassword;
 
     /**
@@ -132,25 +147,92 @@ public class UserService {
         userMapper.updateById(user);
     }
 
+    /**
+     * 管理员重置密码：统一重置为 {@value #FALLBACK_DEFAULT_PASSWORD}
+     * （或环境变量 ZX_USER_DEFAULT_PASSWORD 指定的值），BCrypt 加密后落库。
+     */
     public void resetPassword(Long id) {
         User user = userMapper.selectById(id);
         if (user == null) {
             throw new BadRequestException("用户不存在");
         }
-        if (StringUtils.isBlank(defaultPassword)) {
-            throw new BizIllegalException("未配置重置密码，请设置环境变量 ZX_USER_DEFAULT_PASSWORD");
-        }
-        user.setPassword(BCrypt.hashpw(defaultPassword));
+        String raw = StringUtils.isBlank(defaultPassword)
+                ? FALLBACK_DEFAULT_PASSWORD : defaultPassword.trim();
+        user.setPassword(BCrypt.hashpw(raw));
         userMapper.updateById(user);
+        log.info("管理员重置密码：targetUserId={}, operatorId={}", id, UserContext.getUserId());
     }
 
+    /**
+     * 启用 / 禁用账号（管理员权限）。
+     * <p>
+     * 安全约束（与 {@link #deleteUser} 对齐，避免把系统锁死）：
+     * <ul>
+     *   <li>不允许禁用当前登录账号 —— 否则管理员一步操作后自己就被踢出；</li>
+     *   <li>不允许禁用最后一名启用中的管理员 —— 否则系统再无可用管理入口。</li>
+     * </ul>
+     * 被禁用的账号在登录时会被 zx-auth 拦截，前端提示"请联系管理员"。
+     */
     public void updateStatus(Long id, Integer status) {
+        if (status == null || (status != 0 && status != 1)) {
+            throw new BadRequestException("状态值不合法：0-禁用 1-启用");
+        }
         User user = userMapper.selectById(id);
         if (user == null) {
             throw new BadRequestException("用户不存在");
         }
+        if (status == 0) {
+            Long currentUserId = UserContext.getUserId();
+            if (currentUserId != null && currentUserId.equals(id)) {
+                throw new BizIllegalException("不能禁用当前登录账号");
+            }
+            if (Integer.valueOf(TYPE_STAFF).equals(user.getType())) {
+                Long enabledStaff = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                        .eq(User::getType, TYPE_STAFF)
+                        .eq(User::getStatus, 1)
+                        .ne(User::getId, id));
+                if (enabledStaff == null || enabledStaff == 0) {
+                    throw new BizIllegalException("系统至少保留一名启用状态的管理员，无法禁用");
+                }
+            }
+        }
         user.setStatus(status);
         userMapper.updateById(user);
+        log.info("账号状态变更：targetUserId={}, status={}, operatorId={}",
+                id, status, UserContext.getUserId());
+    }
+
+    /**
+     * 删除用户（管理员权限）。
+     * <p>
+     * 安全约束：
+     * <ul>
+     *   <li>不允许删除当前登录账号，避免管理员误操作后立刻失去登录态；</li>
+     *   <li>不允许删除最后一名管理员（type=1），避免系统失去可管理的账号；</li>
+     *   <li>用户表按 {@code deleted} 逻辑删除，同时物理清理其用户详情扩展记录，
+     *       避免 user_detail 残留孤儿数据。</li>
+     * </ul>
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteUser(Long id) {
+        User user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BadRequestException("用户不存在");
+        }
+        Long currentUserId = UserContext.getUserId();
+        if (currentUserId != null && currentUserId.equals(id)) {
+            throw new BizIllegalException("不能删除当前登录账号");
+        }
+        if (Integer.valueOf(TYPE_STAFF).equals(user.getType())) {
+            Long staffCount = userMapper.selectCount(
+                    new LambdaQueryWrapper<User>().eq(User::getType, TYPE_STAFF));
+            if (staffCount != null && staffCount <= 1) {
+                throw new BizIllegalException("系统至少保留一名管理员，无法删除");
+            }
+        }
+        // 清理扩展信息，再逻辑删除主表
+        userDetailMapper.delete(new LambdaQueryWrapper<UserDetail>().eq(UserDetail::getUserId, id));
+        userMapper.deleteById(id);
     }
 
     public void checkCellPhone(String cellPhone, Long excludeId) {

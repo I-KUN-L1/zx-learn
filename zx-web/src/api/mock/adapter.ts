@@ -19,7 +19,7 @@ import {
   mockUserCoupons,
   mockUsers,
 } from './data'
-import type { CouponVO, CourseVO, OrderVO, UserCouponVO } from '@/types/api'
+import type { CouponVO, CourseDraftVO, CourseVO, OrderVO, UserCouponVO } from '@/types/api'
 
 const FIRST_CHANGED_KEY = 'zx_mock_first_changed'
 
@@ -50,6 +50,26 @@ const inboxes = mockInboxes.map((i) => ({ ...i }))
 const notes = mockNotes.map((n) => ({ ...n }))
 const lessons = mockLessons.map((l) => ({ ...l }))
 const users = mockUsers.map((u) => ({ ...u }))
+
+/**
+ * 默认封面：本地静态资源。
+ * 历史坑：这里曾指向文生图接口 `trae-api-cn.mchost.guru/api/ide/v1/text_to_image?...`，
+ * 该端点现已 404，用它会得到一张裂图。
+ */
+const DEFAULT_COVER = '/covers/course-09.svg'
+
+/** 草稿目录结构（对应 course_draft.catalogue_json） */
+type DraftCatalogue = { name: string; sections?: { name: string }[] }[]
+
+/**
+ * Mock 草稿箱：对应真实后端的 **course_draft** 表，与正式课程 mockCourses 完全分开。
+ * 两个集合不是"同一张表的两个 status"——这正是线上「草稿箱永远为空」的根因，
+ * mock 也按真实语义建模，避免复现同样的错觉。
+ */
+const drafts: CourseDraftVO[] = []
+const draftCatalogue: Record<number, DraftCatalogue | undefined> = {}
+let draftSeq = 5000
+let courseSeq = 9000
 
 /* ========================= 路由表 ========================= */
 const routes: MockRoute[] = [
@@ -178,41 +198,104 @@ const routes: MockRoute[] = [
     method: 'post',
     pattern: /^\/courses\/baseInfo\/save$/,
     handler: ({ data }) => {
-      const id = data.id ? Number(data.id) : 1000 + Math.floor(Math.random() * 9000)
-      const existing = mockCourses.findIndex((c) => c.id === Number(data.id))
-      const course: CourseVO = {
+      // 草稿箱：草稿存在**独立的 drafts 数组**里，对应真实后端的 course_draft 表。
+      // 早期 mock 把草稿直接塞进 mockCourses 并标 status=2，导致「草稿箱」既查不到
+      // （page 用 status 过滤的是正式课程），发布/删除又和正式课程共用 id —— 与实际后端语义不符。
+      const id = data.id ? Number(data.id) : ++draftSeq
+      const existing = drafts.findIndex((d) => d.id === id)
+      const draft: CourseDraftVO = {
         id,
-        name: String(data.name),
-        coverUrl:
-          (data.coverUrl as string) ||
-          'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=online%20course%20default%20cover%2C%20books%20and%20graduation%20cap%2C%20indigo%20flat%20design&image_size=landscape_4_3',
+        courseId: existing >= 0 ? drafts[existing].courseId ?? null : null,
+        name: String(data.name ?? ''),
+        coverUrl: (data.coverUrl as string) || DEFAULT_COVER,
         price: Number(data.price ?? 0),
         categoryIdLv1: Number(data.categoryIdLv1 ?? 1),
         categoryIdLv2: data.categoryIdLv2 ? Number(data.categoryIdLv2) : undefined,
         teacherId: 1,
-        status: 2,
         free: Number(data.free ?? 0),
-        publishTimes: existing >= 0 ? mockCourses[existing].publishTimes : 0,
         description: (data.description as string) ?? '',
-        enrollNum: 0,
-        score: 0,
-        catalogues: [],
+        step: Number(data.step ?? 1),
+        submitted: 0,
+        updateTime: new Date().toISOString(),
       }
-      if (existing >= 0) mockCourses[existing] = course
-      else mockCourses.push(course)
+      if (existing >= 0) drafts[existing] = draft
+      else drafts.unshift(draft)
+      // 章节随草稿一起存：真实后端落在 course_draft.catalogue_json
+      draftCatalogue[id] = (data.catalogueList as DraftCatalogue) ?? draftCatalogue[id]
       return id
+    },
+  },
+  {
+    method: 'get',
+    pattern: /^\/courses\/draft\/page$/,
+    handler: ({ params }) => {
+      const pageNo = Number(params.pageNo ?? 1)
+      const pageSize = Number(params.pageSize ?? 10)
+      const name = params.name ? String(params.name).toLowerCase() : ''
+      const list = drafts.filter(
+        (d) => d.submitted === 0 && (!name || d.name.toLowerCase().includes(name)),
+      )
+      return {
+        total: list.length,
+        pages: Math.ceil(list.length / pageSize),
+        list: list.slice((pageNo - 1) * pageSize, pageNo * pageSize),
+      }
+    },
+  },
+  {
+    method: 'delete',
+    pattern: /^\/courses\/draft\/(\d+)$/,
+    handler: ({ path }) => {
+      const idx = drafts.findIndex((d) => d.id === Number(path[0]))
+      if (idx < 0) return R_ERR(404, '课程草稿不存在')
+      if (drafts[idx].submitted === 1) return R_ERR(400, '该草稿已发布，请在「已发布」列表中下架或删除')
+      delete draftCatalogue[drafts[idx].id]
+      drafts.splice(idx, 1)
+      return null
     },
   },
   {
     method: 'post',
     pattern: /^\/courses\/upShelf$/,
     handler: ({ data }) => {
-      const c = mockCourses.find((x) => x.id === Number(data.id))
-      if (!c) return R_ERR(404, '课程不存在')
-      if (!c.name || c.price == null) return R_ERR(400, '课程信息不完整，无法上架')
-      if (!c.catalogues?.length) return R_ERR(400, '请先完善章节目录后再上架')
-      c.status = 1
-      c.publishTimes = (c.publishTimes ?? 0) + 1
+      const draftId = Number(data.id)
+      const idx = drafts.findIndex((d) => d.id === draftId)
+      if (idx < 0) return R_ERR(404, '课程草稿不存在')
+      const draft = drafts[idx]
+      if (!draft.name) return R_ERR(400, '请填写课程名称')
+      if (draft.categoryIdLv1 == null) return R_ERR(400, '请选择课程分类')
+      if (draft.price == null) return R_ERR(400, '请填写课程价格')
+      if (draft.teacherId == null) return R_ERR(400, '请选择授课老师')
+      const catalogue = draftCatalogue[draft.id] ?? []
+      const courseId = draft.courseId ?? ++courseSeq
+      const chapterCount = catalogue.length
+      const subjectCount = catalogue.reduce((n, ch) => n + (ch.sections?.length ?? 0), 0)
+      const course: CourseVO = {
+        id: courseId,
+        name: draft.name,
+        coverUrl: draft.coverUrl ?? DEFAULT_COVER,
+        price: draft.price,
+        categoryIdLv1: draft.categoryIdLv1,
+        categoryIdLv2: draft.categoryIdLv2,
+        teacherId: draft.teacherId ?? 1,
+        status: 1,
+        free: draft.free ?? 0,
+        publishTimes: (mockCourses.find((c) => c.id === courseId)?.publishTimes ?? 0) + 1,
+        description: draft.description,
+        enrollNum: 0,
+        score: 0,
+        catalogues: catalogue.map((ch, ci) => ({
+          id: courseId * 100 + ci,
+          name: ch.name,
+          sections: (ch.sections ?? []).map((s, si) => ({ id: courseId * 1000 + ci * 10 + si, name: s.name })),
+        })),
+      }
+      const existing = mockCourses.findIndex((c) => c.id === courseId)
+      if (existing >= 0) mockCourses[existing] = course
+      else mockCourses.push(course)
+      // 已发布 → 离开草稿箱
+      drafts.splice(idx, 1)
+      delete draftCatalogue[draft.id]
       return null
     },
   },
@@ -221,7 +304,8 @@ const routes: MockRoute[] = [
     pattern: /^\/courses\/downShelf$/,
     handler: ({ data }) => {
       const c = mockCourses.find((x) => x.id === Number(data.id))
-      if (c) c.status = 2
+      // 与后端一致：下架写 status = 0（不是 2）
+      if (c) c.status = 0
       return null
     },
   },
@@ -237,7 +321,12 @@ const routes: MockRoute[] = [
   {
     method: 'get',
     pattern: /^\/courses\/baseInfo\/(\d+)$/,
-    handler: ({ path }) => mockCourses.find((c) => c.id === Number(path[0])) ?? R_ERR(404, '课程不存在'),
+    handler: ({ path }) => {
+      // 编辑态读的是**草稿**（course_draft），不是正式课程
+      const draft = drafts.find((d) => d.id === Number(path[0]))
+      if (!draft) return R_ERR(404, '课程草稿不存在')
+      return { ...draft, catalogueList: draftCatalogue[draft.id] ?? [] }
+    },
   },
 
   /* ---------- AI ---------- */
@@ -308,9 +397,9 @@ const routes: MockRoute[] = [
     pattern: /^\/learning-records\/progress$/,
     handler: () => null,
   },
-  { method: 'get', pattern: /^\/learning-records\/users\/\d+\/all$/, handler: () => mockLearningRecords },
-  { method: 'post', pattern: /^\/sign-ins$/, handler: () => null },
-  { method: 'get', pattern: /^\/sign-ins\/today$/, handler: () => ({ signed: mockSignedToday() }) },
+  { method: 'get', pattern: /^\/learning-records\/my$/, handler: () => mockLearningRecords },
+  { method: 'post', pattern: /^\/sign-ins$/, handler: () => mockSignToday() },
+  { method: 'get', pattern: /^\/sign-ins\/today$/, handler: () => mockSignedToday() },
   { method: 'get', pattern: /^\/sign-ins$/, handler: () => mockSignDates() },
   {
     method: 'post',

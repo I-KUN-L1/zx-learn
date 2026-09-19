@@ -30,6 +30,40 @@ export async function forceLogout(): Promise<void> {
 }
 
 /**
+ * 账号被禁用提示弹窗（后端业务码 423）。
+ *
+ * 与 promptLogin 的区别：这里不是"要不要登录"的选择题，而是一个明确结论，
+ * 因此用只有一个"我知道了"按钮的 alert，并把处置方式（联系管理员）写进正文，
+ * 避免用户反复尝试登录。
+ *
+ * 加单飞锁：登录页可能因自动重试/重复点击并发触发多次，弹窗只留一个。
+ */
+let accountDisabledPrompting = false
+
+export async function promptAccountDisabled(message?: string): Promise<void> {
+  if (accountDisabledPrompting) return
+  accountDisabledPrompting = true
+  try {
+    await ElMessageBox.alert(
+      message ||
+        '该账号已被管理员禁用，无法登录。如需恢复使用，请联系管理员为你重新启用账号。',
+      '账号已被禁用',
+      {
+        confirmButtonText: '我知道了',
+        type: 'warning',
+        // 禁用账号属于强结论，点遮罩/ESC 不应静默关闭，避免用户误以为已处理
+        closeOnClickModal: false,
+        closeOnPressEscape: false,
+      },
+    )
+  } catch {
+    /* 用户关闭弹窗：无需后续动作 */
+  } finally {
+    accountDisabledPrompting = false
+  }
+}
+
+/**
  * 登录提醒弹窗：询问用户是否前往登录。
  * @returns true=用户确认前往登录；false=取消或已有弹窗在展示
  */

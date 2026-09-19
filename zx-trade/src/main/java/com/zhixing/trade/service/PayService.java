@@ -104,6 +104,23 @@ public class PayService {
     }
 
     /**
+     * Mock 支付（前端"我的订单-去支付"按钮直连通道，联调/演示用）：
+     * 复用支付回调核心链路（流水幂等 + 状态迁移 + 支付成功事件），跳过验签，
+     * 以"MOCK-订单号"作为 payNo 保证幂等（重复点击不重复扣款）。
+     */
+    public void mockPay(Long orderId) {
+        Order order = orderService.getById(orderId);
+        OrderFormDTO form = new OrderFormDTO();
+        form.setId(orderId);
+        form.setTotalFee(order.getTotalFee());
+        form.setPayType(1);
+        form.setPayNo("MOCK-" + order.getOrderNo());
+        form.setSign(buildSign(orderId, order.getTotalFee(), form.getPayNo()));
+        form.setRaw("{\"channel\":\"mock\"}");
+        payCallback(form);
+    }
+
+    /**
      * 校验回调签名，验签失败抛出异常
      */
     public void verifySign(OrderFormDTO form) {

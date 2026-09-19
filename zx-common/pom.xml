@@ -57,5 +57,21 @@
             <artifactId>jakarta.servlet-api</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!--
+          spring-tx：org.springframework.dao.DataIntegrityViolationException 所在模块。
+          CommonExceptionAdvice 用它把「数据完整性约束失败（必填项缺失 / 唯一键冲突 / 字段超长）」
+          映射为 400 明确提示，而不是落到兜底的 500「系统繁忙，请稍后再试」。
+
+          ⚠ 必须显式声明且**不能 optional**：
+            zx-media / zx-message 等无数据库的服务本身只经由 mybatis-plus（optional）
+            间接看到该类型，运行期类路径上并没有 spring-tx —— 一旦缺失，Spring 在
+            introspect CommonExceptionAdvice 时会抛
+            NoClassDefFoundError: org/springframework/dao/DataIntegrityViolationException，
+            导致这两个服务**启动直接失败**（已踩过一次）。
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+        </dependency>
     </dependencies>
 </project>

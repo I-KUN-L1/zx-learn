@@ -1,5 +1,5 @@
 import { request } from './request'
-import type { PageDTO, PageQuery, QuestionResultVO, QuestionVO, UserVO } from '@/types/api'
+import type { Id, PageDTO, PageQuery, QuestionResultVO, QuestionVO, UserVO } from '@/types/api'
 
 /**
  * 用户与考试服务（zx-user / zx-exam）
@@ -11,8 +11,25 @@ export function pageUsers(params: PageQuery) {
 }
 
 /** 重置用户密码为默认密码（后端 @RequireRole(STAFF)） */
-export function resetUserPassword(userId: number) {
+export function resetUserPassword(userId: Id) {
   return request.put<null>(`/users/${userId}/password/default`)
+}
+
+/**
+ * 启用 / 禁用账号（后端 @RequireRole(STAFF)）。
+ * status：0-禁用 1-启用。后端强校验"不能禁用当前登录账号与最后一名启用中的管理员"。
+ * 被禁用的账号在登录时会被拦截，前端提示"请联系管理员"。
+ */
+export function updateUserStatus(userId: Id, status: 0 | 1) {
+  return request.put<null>(`/users/${userId}/status/${status}`)
+}
+
+/**
+ * 删除用户（后端 @RequireRole(STAFF)）。
+ * 后端禁止删除当前登录账号与系统最后一名管理员。
+ */
+export function deleteUser(userId: Id) {
+  return request.delete<null>(`/users/${userId}`)
 }
 
 /* ---------- 考试练习（扩展模块） ---------- */

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhixing.common.mq.MqTopics;
 import com.zhixing.common.mq.RocketMQTemplate;
 import com.zhixing.common.utils.SnowflakeIdGenerator;
 import com.zhixing.trade.domain.po.OrderMsg;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 本地消息表（Outbox）服务。
@@ -108,6 +110,95 @@ public class OrderMsgService {
                 }
             }
         }
+    }
+
+    /**
+     * 查询「订单支付成功」事件投递失败、已转死信的订单 id（去重）。
+     * <p>
+     * 这些订单的 {@code orderPaid} 事件永远不会到达 zx-learning。若不补偿，
+     * 就会出现「订单已支付、"我的课表"里却没有该课程」的不一致 —— 用户再点购买
+     * 还会被"已拥有"拦截，形成死锁。由 {@code LessonReconcileJob} 消费本结果做补开课。
+     */
+    public List<Long> deadPaidOrderIds(int limit) {
+        return orderMsgMapper.selectList(new LambdaQueryWrapper<OrderMsg>()
+                        .select(OrderMsg::getOrderId)
+                        .eq(OrderMsg::getTag, MqTopics.Tags.ORDER_PAID)
+                        .eq(OrderMsg::getStatus, STATUS_DEAD)
+                        .orderByAsc(OrderMsg::getId)
+                        .last("LIMIT " + limit))
+                .stream()
+                .map(OrderMsg::getOrderId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 补偿成功：把该订单的「支付成功」死信标记为已消费，避免每轮扫描重复补偿。
+     */
+    public void markPaidMsgConsumed(Long orderId) {
+        orderMsgMapper.update(null, new LambdaUpdateWrapper<OrderMsg>()
+                .eq(OrderMsg::getOrderId, orderId)
+                .eq(OrderMsg::getTag, MqTopics.Tags.ORDER_PAID)
+                .eq(OrderMsg::getStatus, STATUS_DEAD)
+                .set(OrderMsg::getStatus, STATUS_CONSUMED)
+                .set(OrderMsg::getUpdateTime, LocalDateTime.now()));
+    }
+
+    /**
+     * 死信重放：把已转死信的消息退回「待投递」，交由 {@link #deliverPendings()} 再投一次。
+     * <p>
+     * 背景（全量测试发现）：原实现只有 {@code orderPaid} 一类死信有补偿通道
+     * （{@code LessonReconcileJob}），其余 tag —— {@code LOCK}/{@code CONFIRM}（课程名额）、
+     * {@code USE}/{@code REFUND}（券核销）—— 一旦投递失败转死信就**永久残留、无人消费、
+     * 无任何告警**，会造成课程名额/券核销的静默不一致。
+     * <p>
+     * 安全性：重放只是把状态退回待投递，真正消费仍由各消费端幂等逻辑兜底
+     * （{@code quota:lock:}/{@code quota:confirm:} 流水去重、券核销按订单幂等）。
+     * 每次重放只给<b>一次</b>投递机会（retry_count 直接置为 maxRetry，失败即回到死信），
+     * 避免"永久不可消费的毒消息"被无限重放放大流量。
+     *
+     * @param limit 单次重放上限
+     * @return 实际退回待投递的消息条数
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int replayDeadMsgs(int limit) {
+        List<OrderMsg> deads = orderMsgMapper.selectList(new LambdaQueryWrapper<OrderMsg>()
+                .eq(OrderMsg::getStatus, STATUS_DEAD)
+                .orderByAsc(OrderMsg::getId)
+                .last("LIMIT " + limit));
+        if (deads == null || deads.isEmpty()) {
+            return 0;
+        }
+        int replayed = 0;
+        for (OrderMsg msg : deads) {
+            replayed += orderMsgMapper.update(null, new LambdaUpdateWrapper<OrderMsg>()
+                    .eq(OrderMsg::getId, msg.getId())
+                    .eq(OrderMsg::getStatus, STATUS_DEAD)
+                    .set(OrderMsg::getRetryCount, msg.getMaxRetry() == null ? 5 : msg.getMaxRetry())
+                    .set(OrderMsg::getStatus, STATUS_PENDING)
+                    .set(OrderMsg::getNextRetryTime, LocalDateTime.now())
+                    .set(OrderMsg::getUpdateTime, LocalDateTime.now()));
+        }
+        if (replayed > 0) {
+            log.warn("死信重放：{} 条消息退回待投递（单次重放只给一次投递机会）", replayed);
+        }
+        return replayed;
+    }
+
+    /**
+     * 死信快照（按 tag 计数），供运维/看板观测。
+     * 正常水位应为空 Map —— 任何非空值都意味着有业务事件永久未送达。
+     */
+    public java.util.Map<String, Integer> deadMsgSummary() {
+        List<OrderMsg> deads = orderMsgMapper.selectList(new LambdaQueryWrapper<OrderMsg>()
+                .eq(OrderMsg::getStatus, STATUS_DEAD));
+        java.util.Map<String, Integer> summary = new java.util.TreeMap<>();
+        for (OrderMsg msg : deads) {
+            String tag = msg.getTag() == null ? "UNKNOWN" : msg.getTag();
+            summary.merge(tag, 1, Integer::sum);
+        }
+        return summary;
     }
 
     private String toJson(Object payload) {

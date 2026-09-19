@@ -6,6 +6,8 @@ import com.zhixing.auth.domain.po.Privilege;
 import com.zhixing.auth.domain.po.RolePrivilege;
 import com.zhixing.auth.mapper.PrivilegeMapper;
 import com.zhixing.auth.mapper.RolePrivilegeMapper;
+import com.zhixing.common.annotation.RequireRole;
+import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.PageDTO;
 import com.zhixing.common.domain.PageQuery;
 import com.zhixing.common.domain.R;
@@ -16,10 +18,14 @@ import java.util.List;
 
 /**
  * 权限管理
+ * <p>
+ * 权限：RBAC 管理属于系统配置面，类级限定为员工（管理员）。
+ * 修复前无任何角色校验，任意已登录用户可增删改权限点并给任意角色授权（垂直越权）。
  */
 @RestController
 @RequestMapping("/privileges")
 @RequiredArgsConstructor
+@RequireRole(UserRole.STAFF)
 public class PrivilegeController {
 
     private final PrivilegeMapper privilegeMapper;

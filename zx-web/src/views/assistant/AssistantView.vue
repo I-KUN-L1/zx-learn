@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { ChatDotRound, Delete, Promotion, RefreshRight, VideoPause, User } from '@element-plus/icons-vue'
 import { useSSE } from '@/composables/useSSE'
 import { useUserStore } from '@/stores/user'
@@ -11,8 +11,10 @@ import {
   sessionDetail,
   sessionHistory,
   stopChat,
+  updateSessionTitle,
 } from '@/api/ai'
 import ChatMessageItem from '@/components/ai/ChatMessageItem.vue'
+import { confirmAction } from '@/utils/confirm'
 import type { ChatMessage, ChatSession } from '@/types/api'
 
 const userStore = useUserStore()
@@ -66,7 +68,8 @@ async function onRefreshSessions() {
 }
 
 async function removeSession(id: string) {
-  await ElMessageBox.confirm('删除后不可恢复，确定删除该会话吗？', '删除会话', { type: 'warning' }).catch(() => null)
+  // 点「取消」/关闭弹窗时必须终止，只有点「确认」才执行删除
+  if (!(await confirmAction('删除后不可恢复，确定删除该会话吗？', '删除会话', { type: 'warning' }))) return
   try {
     await deleteSession(id)
     sessions.value = sessions.value.filter((s) => s.id !== id)
@@ -128,10 +131,11 @@ async function send() {
         scrollToBottom()
       } else if (ev.type === 'END') {
         aiMsg.pending = false
-        // 里程碑：有回复后用问题摘要命名新会话
+        // 里程碑：有回复后用问题摘要命名新会话，并持久化到后端
         const s = sessions.value.find((x) => x.id === sessionId)
         if (s && (!s.title || s.title === '新会话')) {
           s.title = question.slice(0, 16)
+          updateSessionTitle(sessionId, s.title).catch(() => undefined)
         }
         scrollToBottom()
       }
@@ -140,10 +144,13 @@ async function send() {
       aiMsg.pending = false
       scrollToBottom()
     },
-    onError: () => {
+    onError: (err) => {
       aiMsg.pending = false
       if (!aiMsg.content) {
-        aiMsg.content = '_连接中断，请重试。_'
+        // 透出真实原因（登录过期 / 无权限 / 来源被跨域策略拒绝 / 后端不可用）。
+        // 原先统一写成「连接中断，请重试」，会把可自证的问题变成排查盲区。
+        const reason = err instanceof Error && err.message ? err.message : '连接中断，请重试。'
+        aiMsg.content = `_${reason}_`
       }
       scrollToBottom()
     },

@@ -8,12 +8,14 @@ import com.zhixing.common.constants.UserRole;
 import com.zhixing.common.domain.R;
 import com.zhixing.common.utils.InternalOnlyGuard;
 import com.zhixing.common.utils.OwnerAccessGuard;
+import com.zhixing.common.utils.UserContext;
 import com.zhixing.learning.domain.dto.LearningProgressDTO;
 import com.zhixing.learning.service.LearningRecordService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 学习记录。
@@ -33,6 +35,15 @@ public class LearningRecordController {
     @RequireRole(UserRole.STUDENT)
     public R<Long> submitProgress(@RequestBody LearningProgressDTO form) {
         return R.ok(learningRecordService.submitProgress(form));
+    }
+
+    /**
+     * 我的学习记录时间线（学员端，聚合课程/小节名称）。
+     */
+    @GetMapping("/my")
+    @RequireRole(UserRole.STUDENT)
+    public R<List<Map<String, Object>>> myRecords() {
+        return R.ok(learningRecordService.myRecords(UserContext.getUserId()));
     }
 
     /**

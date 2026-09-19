@@ -24,7 +24,11 @@ public class PageQuery implements Serializable {
     public <T> Page<T> toMpPage(OrderItem... orders) {
         Page<T> page = Page.of(pageNo, pageSize);
         if (StringUtils.hasText(sortBy)) {
-            page.addOrder(new OrderItem());
+            // 关键：OrderItem 必须携带排序列名与方向，空 OrderItem 会导致排序静默失效
+            OrderItem item = new OrderItem();
+            item.setColumn(sortBy);
+            item.setAsc(Boolean.TRUE.equals(isAsc));
+            page.addOrder(item);
         }
         if (orders != null) {
             for (OrderItem order : orders) {

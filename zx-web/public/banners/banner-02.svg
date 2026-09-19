@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="600" viewBox="0 0 1600 600" role="img" aria-label="Java 全栈成长计划横幅">
+  <defs>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e1b4b"/>
+      <stop offset="0.5" stop-color="#4f46e5"/>
+      <stop offset="1" stop-color="#a21caf"/>
+    </linearGradient>
+    <radialGradient id="glow2" cx="0.2" cy="0.75" r="0.65">
+      <stop offset="0" stop-color="#f0abfc" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#f0abfc" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="600" fill="url(#g2)"/>
+  <rect width="1600" height="600" fill="url(#glow2)"/>
+  <g stroke="#ddd6fe" stroke-opacity="0.3" stroke-width="2" fill="none">
+    <path d="M1240 90 L1240 510"/>
+    <path d="M1360 150 L1360 450"/>
+    <path d="M1480 210 L1480 390"/>
+  </g>
+  <g fill="none" stroke="#c4b5fd" stroke-opacity="0.75" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1020 250 L900 300 L1020 350"/>
+    <path d="M1180 250 L1300 300 L1180 350"/>
+    <path d="M1120 230 L1080 370"/>
+  </g>
+  <g fill="#ede9fe" fill-opacity="0.8">
+    <circle cx="520" cy="150" r="10"/>
+    <circle cx="640" cy="470" r="7"/>
+    <circle cx="380" cy="380" r="6"/>
+  </g>
+  <rect width="1600" height="600" fill="#0b1020" fill-opacity="0.18"/>
+</svg>

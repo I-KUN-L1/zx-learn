@@ -24,6 +24,8 @@ public class CourseVO {
     private Integer free;
     private Integer publishTimes;
     private String description;
+    /** 学习人数（取自销量字段 sold，前端课程卡片/排序维度） */
+    private Integer enrollNum;
     private List<CourseCatalogue> catalogues;
 
     public static CourseVO of(Course course) {
@@ -40,6 +42,7 @@ public class CourseVO {
         vo.setFree(course.getFree());
         vo.setPublishTimes(course.getPublishTimes());
         vo.setDescription(course.getDescription());
+        vo.setEnrollNum(course.getSold() == null ? 0 : course.getSold());
         return vo;
     }
 }

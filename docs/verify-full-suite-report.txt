@@ -1,0 +1,197 @@
+=====================================================================
+知行智学 ZhiXing Learn · 前后端全量测试报告
+生成时间: 2026-09-18 18:56:18
+网关地址: http://localhost:8080
+=====================================================================
+
+=== 阶段 0：环境与构建产物 ===
+  [PASS] 16 个可运行服务的 fat jar 均存在
+  [PASS] 前端构建产物 dist/index.html 存在
+  [PASS] 全部 16 个服务端口可达
+
+=== 阶段 1：登录与鉴权基线 ===
+  [PASS] 学员登录 13900000001
+  [INFO] 学员 id = 2001
+  [PASS] 教师登录 13900000002
+  [PASS] 管理员登录 13800000001
+  [PASS] 匿名访问受保护接口 /points/summary → 401
+  [PASS] 匿名访问 /users/page → 401
+  [PASS] 篡改签名的 token 被拒 → 401
+  [PASS] alg=none 无签名 token 被拒 → 401
+  [PASS] 非 Bearer 前缀的 Authorization 被拒 → 401
+  [PASS] 合法 token 可访问 /points/summary
+
+=== 阶段 2：全量接口矩阵（全部端点 × 匿名/学员/管理员）===
+  [INFO]  zx-aigc        端点  20  正常  20  异常   0
+  [INFO]  zx-auth        端点  28  正常  28  异常   0
+  [INFO]  zx-course      端点  27  正常  27  异常   0
+  [INFO]  zx-data        端点   6  正常   6  异常   0
+  [INFO]  zx-exam        端点  20  正常  20  异常   0
+  [INFO]  zx-insight     端点   8  正常   8  异常   0
+  [INFO]  zx-learning    端点  37  正常  37  异常   0
+  [INFO]  zx-media       端点   9  正常   9  异常   0
+  [INFO]  zx-message     端点   3  正常   3  异常   0
+  [INFO]  zx-pay         端点   5  正常   5  异常   0
+  [INFO]  zx-promotion   端点  17  正常  17  异常   0
+  [INFO]  zx-remark      端点   2  正常   2  异常   0
+  [INFO]  zx-search      端点   7  正常   7  异常   0
+  [INFO]  zx-trade       端点  33  正常  33  异常   0
+  [INFO]  zx-user        端点  24  正常  24  异常   0
+  [PASS] 全量端点探测覆盖（应 ≥ 240 个端点）
+  [INFO] 实际探测端点数 = 246
+  [PASS] 无 5xx / 无契约破坏的端点占比（正常数 = 总数）
+  [PASS] 异常端点数为 0
+  [INFO] 匿名可访问端点（网关白名单）共 14 个
+
+=== 阶段 3：垂直越权（管理端写接口的角色校验）===
+  [PASS] 学员新建角色被拒(403)
+  [PASS] 教师新建角色被拒(403)
+  [PASS] 学员新建菜单被拒(403)
+  [PASS] 学员新建权限点被拒(403)
+  [PASS] 学员修改角色被拒(403)
+  [PASS] 学员删除角色被拒(403)
+  [PASS] 学员删除菜单被拒(403)
+  [PASS] 学员给角色绑定菜单被拒(403)
+  [PASS] 学员给角色绑定权限点被拒(403)
+  [PASS] 学员新建优惠券被拒(403)
+  [PASS] 学员新增题目被拒(403)
+  [PASS] 学员写运营看板被拒(403)
+  [PASS] 学员发短信被拒(403)
+  [PASS] 学员访问订单管理列表被拒(403)
+  [PASS] 学员访问用户管理列表被拒(403)
+  [PASS] 学员上架课程被拒(403)
+  [PASS] 学员删除课程被拒(403)
+  [INFO] 越权探测残留：role=0 menu=0 privilege=0（已清理）
+  [PASS] 越权探测未在角色表留下持久数据（清理后为 0）
+  [INFO] 管理员新建角色 → code=200（对照组：管理员可写）
+
+=== 阶段 4：水平越权 IDOR（访问他人私有数据）===
+  [INFO] 他人（对照学员）id = 2101
+  [PASS] 学员读他人学习记录被拒(403)
+  [PASS] 学员读他人学习时长被拒(403)
+  [PASS] 学员读他人积分被拒(403)
+  [PASS] 学员读他人课表课程 id 被拒(403)
+  [PASS] 学员读他人答题记录被拒(403)
+  [PASS] 学员读他人答题统计被拒(403)
+  [PASS] 学员读他人学情画像被拒(403)
+  [PASS] 学员读他人签到连续天数被拒(403)
+  [PASS] 学员读本人学习记录放行（@NoWrapper 裸数组，code=LIST）
+  [PASS] 学员读他人订单被拒(code=403)
+  [PASS] 学员删除他人订单被拒(code=403)
+  [PASS] 他人 AI 会话不可被越权读取(code=403)
+  [PASS] 他人 AI 会话不可被越权删除（会话数据仍在）
+  [PASS] 他人 AI 会话标题不可被越权篡改
+  [PASS] 学员重置他人密码被拒(code=403)
+  [PASS] 学员禁用他人账号被拒(code=403)
+  [PASS] 学员删除他人账号被拒(code=403)
+  [PASS] 对照账号仍然存在（未被越权删除）
+
+=== 阶段 5：内部接口外部不可达（零信任）===
+  [PASS] 内部接口外部不可达：GET /course/{id}
+  [PASS] 内部接口外部不可达：GET /course/{id}/catalogues
+  [PASS] 内部接口外部不可达：GET /order-details/stats/dashboard
+  [PASS] 内部接口外部不可达：GET /learning-records/stats/active
+  [PASS] 内部接口外部不可达：POST /order-details/reconcile-lessons
+  [PASS] 内部接口外部不可达：POST /lessons/internal/enroll
+  [PASS] 内部接口外部不可达：POST /order-details/replay-dead-msgs
+  [PASS] 内部接口外部不可达：GET /order-details/dead-msgs
+  [PASS] 内部接口外部不可达：POST /user-coupons/internal/mark-used
+  [PASS] 内部接口外部不可达：POST /user-coupons/internal/mark-refunded
+  [PASS] 内部接口外部不可达：POST /questions (教师写)
+  [PASS] 内部接口外部不可达：GET /users/stats/total
+  [PASS] 内部开课接口未产生合成课表行
+  [PASS] 内部接口匿名访问被网关拦截(401)
+  [INFO] POST /points/award 内部加分接口：学员 GET → code=405
+
+=== 阶段 6：参数校验 / 边界值 / 注入 ===
+  [PASS] name 参数未受影响（注入串命中 0 条，全库 13 条）
+  [PASS] 排序字段注入不产生 5xx
+  [PASS] course 表未被 DROP（注入无效）
+  [PASS] 路径参数注入 → 客户端错误而非 5xx
+  [PASS] 分页参数传非数字 → 客户端错误 400/404（禁止 500）
+  [PASS] 路径 id 传非数字 → 客户端错误 400/404（禁止 500）
+  [PASS] status 传非数字 → 客户端错误 400/404（禁止 500）
+  [PASS] 不存在的课程 id → 业务错误或空数据（禁止 5xx）
+  [PASS] 不存在的题目 id → 禁止 5xx
+  [PASS] 不存在的订单 id → 禁止 5xx
+  [PASS] 不存在的话题 id → 禁止 5xx
+  [PASS] 超长查询串（3000 字符）→ 正常 200
+  [PASS] XSS 串走 LIKE 查询 → 正常 200
+  [PASS] 通配符 %/_ → 正常 200
+  [PASS] 登录学员 不传 status → 课程列表 200（禁止 500）
+  [PASS] 登录学员 课程列表返回真实数据（10 条）
+  [PASS] 登录教师 不传 status → 课程列表 200（禁止 500）
+  [PASS] 登录教师 课程列表返回真实数据（10 条）
+  [PASS] 登录管理员 不传 status → 课程列表 200（禁止 500）
+  [PASS] 登录管理员 课程列表返回真实数据（10 条）
+  [PASS] 匿名不传 status 仍可浏览已上架课程
+  [PASS] 登录学员带 status=1 筛选 → 仍正常 200
+  [PASS] 白名单接口无任何参数仍可用(200)
+  [PASS] 下单缺参 → 业务错误（非 5xx，不落脏单）
+  [INFO] 发帖缺参 → code=400
+  [INFO] 前端 v-html 使用点 5 处，其中经 renderMarkdown(DOMPurify) 的 2 处
+  [PASS] 前端 markdown 渲染统一走 DOMPurify 净化
+  [PASS] AI 消息与讲义渲染均引用统一净化函数
+  [PASS] 笔记渲染也走 DOMPurify 净化（防存储型 XSS）
+  [PASS] 无未净化的 v-html 直接绑定原始内容
+  [PASS] DELETE /embedding 传非数字 id → 业务错误 400（非 5xx）
+  [PASS] search/all 不受 topK 无上限影响（非 5xx）
+  [PASS] 合成「已下架」课程已就位
+  [PASS] 匿名传 status=0 无法枚举已下架课程
+  [PASS] 管理员带 token 仍可按 status=0 筛选（对照组，证明过滤按身份而非查询失效）
+  [PASS] 合成课程已清理
+
+=== 阶段 7：敏感数据脱敏（密码字段外泄排查）===
+  [PASS] 登录响应脱敏：无密码/密钥字段
+  [PASS] 管理员登录响应脱敏：无密码/密钥字段
+  [PASS] 用户管理列表脱敏：无密码/密钥字段
+  [PASS] 用户详情脱敏：无密码/密钥字段
+  [PASS] 当前用户信息脱敏：无密码/密钥字段
+  [PASS] 学员列表脱敏：无密码/密钥字段
+  [PASS] 教师列表脱敏：无密码/密钥字段
+  [PASS] 员工列表脱敏：无密码/密钥字段
+  [PASS] JWT 载荷不含密码字段
+  [INFO] 用户管理列表中手机号是否打码：否
+
+=== 阶段 8：幂等与凭证安全 ===
+  [PASS] 重复登录同一账号仍成功（无一次性限制）
+  [PASS] 重复手机号注册被拒（明确业务码，禁止 500）
+  [PASS] 重复删除不存在的笔记两次均不报 5xx
+  [PASS] 课表课程 id 集合重复查询结果一致
+  [PASS] 点赞接口两次调用均返回成功（幂等切换）
+  [PASS] 批量查询点赞状态不报错
+
+=== 阶段 9：数据一致性交叉校验（SQL 不变量）===
+  [PASS] 已支付订单但课表缺失数 = 0
+  [PASS] 已支付订单 (用户,课程) 重复数 = 0（paid_key 唯一索引）
+  [PASS] 课表 (用户,课程) 重复行数 = 0
+  [PASS] 优惠券状态与最后一条核销流水漂移数 = 0
+  [PASS] 有核销流水但未回填订单号的券 = 0
+  [PASS] 上架课程存在空讲义小节数 = 0
+  [PASS] 课程目录存在空章节的小节数 = 0
+  [PASS] order_msg 死信残留（未补偿）= 0
+  [PASS] 不存在与用户不匹配的笔记（越权残留）= 0
+
+=== 阶段 10：性能采样（P95 < 500ms）===
+  [PASS] P95 课程列表 /courses/page = 10ms（均值 10ms，阈值 500ms）
+  [PASS] P95 课程详情 /courses/3001 = 10ms（均值 8ms，阈值 500ms）
+  [PASS] P95 我的课表 /lessons/page = 18ms（均值 17ms，阈值 500ms）
+  [PASS] P95 积分汇总 /points/summary = 11ms（均值 10ms，阈值 500ms）
+  [PASS] P95 订单列表 /orders/page = 65ms（均值 60ms，阈值 500ms）
+  [PASS] P95 学情画像 /insight/profiles/mine = 8ms（均值 8ms，阈值 1500ms）
+  [PASS] P95 讨论区 /boards/page = 25ms（均值 11ms，阈值 500ms）
+  [PASS] P95 题目分页 /questions/page = 20ms（均值 16ms，阈值 500ms）
+  [PASS] P95 用户分页 /users/page = 25ms（均值 15ms，阈值 500ms）
+  [INFO] 并发 200 请求（20 并发）：成功 200，5xx 0，连接失败 0
+  [INFO] 并发响应码分布 = 200:200；吞吐 655.3 RPS；P95 43ms
+  [PASS] 并发请求全部成功(HTTP 200)
+  [PASS] 并发无 5xx
+  [PASS] 并发无连接失败
+  [PASS] 并发吞吐 ≥ 50 RPS
+
+---------------------------------------------------------------------
+断言总数: 136   通过: 136   失败: 0
+结论: 全部通过 ✅
+原始报文目录: logs/verify-full-suite/
+接口矩阵明细: logs/verify-full-suite/api-matrix-detail.txt
+---------------------------------------------------------------------

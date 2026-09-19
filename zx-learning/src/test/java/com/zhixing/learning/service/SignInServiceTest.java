@@ -24,6 +24,13 @@ class SignInServiceTest {
     @Mock
     private SignInMapper signInMapper;
 
+    /**
+     * 签到积分会同步写入积分明细（幂等键 = signDate），故 SignInService 依赖 PointsService。
+     * 这里只需注入一个 mock：checkIn 不消费 award 的返回值，积分入账逻辑由 PointsService 自身单测覆盖。
+     */
+    @Mock
+    private PointsService pointsService;
+
     @InjectMocks
     private SignInService service;
 

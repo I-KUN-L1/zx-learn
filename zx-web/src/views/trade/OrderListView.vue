@@ -2,8 +2,9 @@
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { pageOrders, cancelOrder, mockPayOrder } from '@/api/trade'
+import { applyRefund, cancelOrder, deleteOrder, mockPayOrder, pageOrders } from '@/api/trade'
 import { formatDate, formatPrice, ORDER_STATUS, ORDER_STATUS_TAG, ORDER_STATUS_TEXT } from '@/utils/format'
+import { confirmAction } from '@/utils/confirm'
 import EmptyState from '@/components/common/EmptyState.vue'
 import type { OrderVO } from '@/types/api'
 
@@ -16,36 +17,49 @@ const pages = ref(0)
 const loading = ref(true)
 const highlightOrderNo = (route.query.orderNo as string) || ''
 
+/**
+ * 支持深链筛选：/trade/orders?status=2（已支付）/ ?pending=1（待支付）
+ * 下单流程跳转后可直接落到对应状态页。
+ */
+function statusFromRoute(): number | '' {
+  if (route.query.pending != null) return ORDER_STATUS.PENDING
+  const raw = route.query.status
+  if (raw == null || raw === '') return ''
+  const n = Number(raw)
+  return Number.isNaN(n) ? '' : n
+}
+
 async function fetchOrders() {
   loading.value = true
   try {
     const res = await pageOrders({ ...query })
-    orders.value = res.list
-    total.value = res.total
-    pages.value = res.pages
+    // 防御：接口异常结构（list 缺失）时回退空列表，避免 undefined 导致渲染崩溃
+    orders.value = res?.list ?? []
+    total.value = res?.total ?? 0
+    pages.value = res?.pages ?? 0
   } catch {
-    /* ignore */
+    orders.value = []
   } finally {
     loading.value = false
   }
 }
 
+/** 继续支付：后端复用真实支付回调链路（流水幂等），成功后弹支付成功提示 */
 async function onPay(order: OrderVO) {
   try {
     await mockPayOrder(order.id)
-    ElMessage.success('支付成功！')
+    await ElMessageBox.alert('支付成功，课程已开通，可在「学习中心」开始学习。', '支付成功', {
+      type: 'success',
+      confirmButtonText: '好的',
+    }).catch(() => null)
     await fetchOrders()
   } catch (e) {
-    ElMessage.info(e instanceof Error ? e.message : '支付失败')
+    ElMessage.info(e instanceof Error ? e.message : '支付失败，请稍后重试')
   }
 }
 
 async function onCancel(order: OrderVO) {
-  await ElMessageBox.confirm(
-    '关闭后订单将不可恢复，优惠券随订单释放，确定关闭吗？',
-    '取消订单',
-    { type: 'warning' }
-  ).catch(() => null)
+  if (!(await confirmAction('关闭后订单将不可恢复，优惠券随订单释放，确定关闭吗？', '取消订单', { type: 'warning' }))) return
   try {
     await cancelOrder(order.id)
     ElMessage.success('订单已关闭')
@@ -55,22 +69,129 @@ async function onCancel(order: OrderVO) {
   }
 }
 
+/**
+ * 可删除的订单状态：已终结、不再需要用户操作的订单。
+ * - 已支付(2)/已完成(4)：交易已完成，允许整理掉
+ * - 已关闭(3)/已退款(6)：流程已终结
+ * 待支付(1) 需先支付或取消；退款中(5) 需等待审核 —— 后端同样强校验。
+ */
+const DELETABLE_STATUS: number[] = [
+  ORDER_STATUS.PAID,
+  ORDER_STATUS.FINISHED,
+  ORDER_STATUS.CLOSED,
+  ORDER_STATUS.REFUNDED,
+]
+
+function canDelete(order: OrderVO): boolean {
+  return DELETABLE_STATUS.includes(order.status)
+}
+
+/**
+ * 删除订单：软删除，仅从"我的订单"移除，管理端仍保留该记录用于对账。
+ */
+async function onDelete(order: OrderVO) {
+  const name = order.details?.[0]?.courseName || '该订单'
+  if (
+    !(await confirmAction(
+      `确定从「我的订单」中移除「${name}」吗？\n移除后不影响课程与交易记录，管理端仍保留该订单。`,
+      '删除订单',
+      { type: 'warning', confirmButtonText: '确认移除' },
+    ))
+  ) {
+    return
+  }
+  try {
+    await deleteOrder(order.id)
+    ElMessage.success('订单已移除')
+    await fetchOrders()
+  } catch {
+    /* 错误由拦截器统一提示 */
+  }
+}
+
+/**
+ * 申请退款：满足基础条件后提交。
+ * - 后端判定满足"进一步条件"（课程未开始学习）时直接退款成功；
+ * - 否则生成待审核退款单，订单转"退款中"，由管理员审批。
+ */
+async function onRefund(order: OrderVO) {
+  let reason = ''
+  try {
+    const res = await ElMessageBox.prompt(
+      `将对「${order.details?.[0]?.courseName || '该课程'}」申请退款（实付 ￥${formatPrice(order.realAmount)}），可填写退款原因：`,
+      '申请退款',
+      {
+        type: 'warning',
+        confirmButtonText: '提交申请',
+        cancelButtonText: '再想想',
+        inputPlaceholder: '选填，例如：课程内容与预期不符',
+        inputValidator: () => true,
+      },
+    )
+    reason = res.value ?? ''
+  } catch {
+    return
+  }
+  try {
+    const res = await applyRefund(order.id, reason)
+    if (res?.mode === 'INSTANT') {
+      await ElMessageBox.alert(
+        res.message || '退款成功，款项将原路退回。',
+        '退款成功',
+        { type: 'success', confirmButtonText: '好的' },
+      ).catch(() => null)
+    } else {
+      await ElMessageBox.alert(
+        res?.message || '退款申请已提交，将由管理员审核。',
+        '已提交审核',
+        { type: 'info', confirmButtonText: '知道了' },
+      ).catch(() => null)
+    }
+    await fetchOrders()
+  } catch {
+    /* 全局拦截器已提示 */
+  }
+}
+
 /** 待支付 15 分钟倒计时（对齐后端 RocketMQ 延迟消息超时关单） */
 const PAY_TIMEOUT = 15 * 60
 
+/**
+ * 剩余秒数。
+ * 后端 createTime 为 "yyyy-MM-dd HH:mm:ss"（Jackson 默认）或 ISO "yyyy-MM-ddTHH:mm:ss"。
+ * 旧实现 `createTime.replace(/-/g, '/')` 会把 ISO 串变成 "2026/09/12T17:47:42"——
+ * 斜杠与 T 混用是 Invalid Date，getTime() 返回 NaN，最终渲染成「剩余 NaN:NaN」。
+ * 这里统一归一化为 "yyyy/MM/dd HH:mm:ss"（按本地时区解析），并在任何一步失败时返回 0 兜底。
+ */
 function remainingSeconds(order: OrderVO): number {
-  const created = new Date(order.createTime.replace(/-/g, '/')).getTime()
+  const raw = (order.createTime ?? '').trim()
+  if (!raw) return 0
+  const normalized = raw.replace('T', ' ').replace(/-/g, '/')
+  const created = new Date(normalized).getTime()
+  if (!Number.isFinite(created)) return 0
   const left = PAY_TIMEOUT - Math.floor((Date.now() - created) / 1000)
-  return Math.max(0, left)
+  return Math.max(0, Math.floor(left))
 }
 
 interface CountdownItem {
-  id: number
+  id: string
   seconds: number
   timer: ReturnType<typeof setInterval>
 }
-const countdowns = ref<Map<number, CountdownItem>>(new Map())
-const countdownMap = ref<Record<number, number>>({})
+const countdowns = ref<Map<string, CountdownItem>>(new Map())
+const countdownMap = ref<Record<string, number>>({})
+
+/**
+ * 归零触发的刷新节流表：orderId → 上次因倒计时归零刷新列表的时间戳。
+ * <p>
+ * 必要性：订单归零后我们调用 fetchOrders 重新拉取；若此刻后端尚未完成关单
+ * （例如事务提交、定时任务未到点），列表仍返回"待支付 + 剩余 0"，watch 会重建计时器
+ * 并在 1 秒后再次归零 → 再次刷新，形成「每秒一次请求」的风暴。
+ * 这里对同一订单的归零刷新做 5 秒节流，杜绝该循环。
+ */
+const zeroRefetchAt = new Map<string, number>()
+/** 归零刷新的最小间隔（毫秒） */
+const ZERO_REFETCH_COOLDOWN = 5000
 
 function setupCountdowns(list: OrderVO[]) {
   // 清理旧计时器
@@ -79,25 +200,35 @@ function setupCountdowns(list: OrderVO[]) {
   countdownMap.value = {}
   for (const o of list) {
     if (o.status !== ORDER_STATUS.PENDING) continue
+    const key = String(o.id)
     const left = remainingSeconds(o)
-    countdownMap.value[o.id] = left
-    const item: CountdownItem = { id: o.id, seconds: left, timer: setInterval(() => {
-      countdownMap.value[o.id] = Math.max(0, (countdownMap.value[o.id] ?? 0) - 1)
-      if ((countdownMap.value[o.id] ?? 0) <= 0) {
+    countdownMap.value[key] = left
+    const item: CountdownItem = { id: key, seconds: left, timer: setInterval(() => {
+      countdownMap.value[key] = Math.max(0, (countdownMap.value[key] ?? 0) - 1)
+      if ((countdownMap.value[key] ?? 0) <= 0) {
         clearInterval(item.timer)
-        // 超时刷新状态（后端延迟消息会关闭订单）
-        fetchOrders()
+        // 超时刷新状态（后端惰性对账 + 定时任务会关闭订单），同一订单 5 秒内只刷新一次
+        const last = zeroRefetchAt.get(key) ?? 0
+        if (Date.now() - last >= ZERO_REFETCH_COOLDOWN) {
+          zeroRefetchAt.set(key, Date.now())
+          fetchOrders()
+        }
       }
     }, 1000) }
-    countdowns.value.set(o.id, item)
+    countdowns.value.set(key, item)
   }
 }
 
-watch(orders, setupCountdowns)
+watch(orders, (list) => {
+  if (Array.isArray(list)) {
+    setupCountdowns(list)
+  }
+})
 
 function countdownText(order: OrderVO): string {
-  const s = countdownMap.value[order.id]
-  if (s == null) return ''
+  const s = countdownMap.value[String(order.id)]
+  // 防御：非法值（NaN/undefined）一律不渲染，避免出现「剩余 NaN:NaN」
+  if (s == null || !Number.isFinite(s)) return ''
   const m = Math.floor(s / 60)
   const ss = s % 60
   return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
@@ -108,7 +239,10 @@ onBeforeUnmount(() => {
   countdowns.value.clear()
 })
 
-onMounted(fetchOrders)
+onMounted(() => {
+  query.status = statusFromRoute()
+  fetchOrders()
+})
 </script>
 
 <template>
@@ -151,9 +285,25 @@ onMounted(fetchOrders)
                 剩余 {{ countdownText(o) }} 自动关闭
               </span>
               <template v-if="o.status === ORDER_STATUS.PENDING">
-                <el-button type="primary" size="small" round @click="onPay(o)">去支付</el-button>
+                <el-button type="primary" size="small" round @click="onPay(o)">继续支付</el-button>
                 <el-button size="small" round @click="onCancel(o)">取消订单</el-button>
               </template>
+              <!-- 已支付：可申请退款 -->
+              <template v-else-if="o.status === ORDER_STATUS.PAID">
+                <el-button type="warning" size="small" plain round @click="onRefund(o)">申请退款</el-button>
+              </template>
+              <span v-else-if="o.status === ORDER_STATUS.REFUNDING" class="zx-text-secondary text-xs">退款审核中，请耐心等待</span>
+              <!-- 已终结订单（已支付/已完成/已关闭/已退款）可删除；软删除，管理端仍保留记录 -->
+              <el-button
+                v-if="canDelete(o)"
+                type="danger"
+                size="small"
+                plain
+                round
+                @click="onDelete(o)"
+              >
+                删除
+              </el-button>
             </div>
           </div>
 

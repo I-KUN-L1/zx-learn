@@ -17,6 +17,8 @@ public enum ErrorCode {
     METHOD_NOT_ALLOWED(405, "请求方法不支持"),
     SYSTEM_ERROR(500, "系统繁忙，请稍后再试"),
     GATEWAY_TIMEOUT(504, "服务调用超时"),
+    /** 账号被管理员禁用：登录需被拦截并提示联系管理员 */
+    ACCOUNT_DISABLED(423, "该账号已被禁用，请联系管理员"),
 
     // ========== 业务 ==========
     BIZ_ILLEGAL(1001, "业务操作不合法"),

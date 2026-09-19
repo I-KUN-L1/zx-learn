@@ -1,7 +1,6 @@
 package com.zhixing.aigc.controller;
 
 import com.zhixing.aigc.domain.ChatSession;
-import com.zhixing.aigc.memory.RedisMessage;
 import com.zhixing.aigc.service.SessionService;
 import com.zhixing.common.domain.R;
 import lombok.RequiredArgsConstructor;
@@ -35,9 +34,16 @@ public class SessionController {
         return R.ok(sessionService.history(userId == null ? 0L : userId));
     }
 
+    /**
+     * 会话消息详情（type: USER / AI，契约对齐前端 ChatMessage）。
+     * <p>
+     * 修复前不校验会话归属 → 任意已登录用户可读他人对话；现由 service 做归属校验，
+     * 因此必须把原始 {@code user-info}（可能为 null = 内部调用）透传下去，不能兜底成 0。
+     */
     @GetMapping("/{sessionId}")
-    public R<List<RedisMessage>> detail(@PathVariable String sessionId) {
-        return R.ok(sessionService.detail(sessionId));
+    public R<List<Map<String, String>>> detail(@PathVariable String sessionId,
+                                              @RequestHeader(value = "user-info", required = false) Long userId) {
+        return R.ok(sessionService.detail(sessionId, userId));
     }
 
     /**
@@ -52,13 +58,14 @@ public class SessionController {
                           @RequestParam(required = false) String sessionId,
                           @RequestHeader(value = "user-info", required = false) Long userId) {
         String id = sessionId != null ? sessionId : (body != null ? body.get("sessionId") : null);
-        sessionService.delete(id, userId == null ? 0L : userId);
+        sessionService.delete(id, userId);
         return R.ok();
     }
 
     @PutMapping("/history")
-    public R<Void> updateTitle(@RequestBody Map<String, String> body) {
-        sessionService.updateTitle(body.get("sessionId"), body.get("title"));
+    public R<Void> updateTitle(@RequestBody Map<String, String> body,
+                               @RequestHeader(value = "user-info", required = false) Long userId) {
+        sessionService.updateTitle(body.get("sessionId"), body.get("title"), userId);
         return R.ok();
     }
 }

@@ -18,6 +18,15 @@ public class InsightLlmProperties {
     /** OpenAI 兼容接口地址 */
     private String baseUrl = "https://api.openai.com";
 
+    /**
+     * Chat Completions 相对路径。
+     * <p>
+     * 留空则自动推断：baseUrl 已带版本段（如智谱 {@code /api/paas/v4}）→
+     * {@code /chat/completions}；否则补 {@code /v1/chat/completions}。
+     * 显式配置可覆盖，避免不同厂商版本段差异再次拼错。
+     */
+    private String chatPath = "";
+
     /** API Key */
     private String apiKey = "";
 

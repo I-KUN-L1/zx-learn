@@ -97,6 +97,17 @@
 ### course_draft 课程草稿表
 与 course 同构，编辑期使用；上架时同步到 course。
 
+补充列：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| catalogue_json | MEDIUMTEXT | 草稿章节目录（JSON：`[{name, sections:[{name}]}]`）。上架时合并进 `course_catalogue` |
+| step | INT | 编辑步骤：1-基础信息 2-目录 3-视频 4-题目 |
+| submitted | INT | 0-草稿箱 / 1-已发布（草稿箱列表只列 `submitted=0`） |
+
+> ⚠ 草稿与正式课程在**两张表**里，不能靠 `course.status` 区分（该列只有 0/1）。
+> 草稿箱走 `GET /courses/draft/page`，不要用 `/courses/page?status=2`。
+
 ### course_catalogue 课程目录表
 | 字段 | 类型 | 说明 |
 |---|---|---|

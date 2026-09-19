@@ -34,19 +34,20 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
-        enabled: false
+        # 关闭 Nacos 时靠各服务下方的 static simple.instances 直连；生产置 NACOS_ENABLED=true 并指向注册中心
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: ${NACOS_ENABLED:false}
       config:
-        enabled: false
+        enabled: ${NACOS_CONFIG_ENABLED:false}
     # 本地开发直连：关闭 Nacos 后，通过 SimpleDiscoveryClient 提供静态服务地址（生产环境删除此段并启用 Nacos）
     discovery:
       client:
         simple:
           instances:
             course-service:
-              - uri: http://localhost:8083
+              - uri: ${SVC_COURSE_URI:http://localhost:8083}
             trade-service:
-              - uri: http://localhost:8087
+              - uri: ${SVC_TRADE_URI:http://localhost:8087}
   codec:
     max-in-memory-size: 10MB
 
@@ -55,14 +56,23 @@ zx:
     # 智谱清言官方 OpenAI 兼容端点：POST https://open.bigmodel.cn/api/paas/v4/chat/completions
     base-url: ${ZX_LLM_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
     chat-path: ${ZX_LLM_CHAT_PATH:chat/completions}
+    # 向量化路径必须与上面的 base-url 配套（两者拼接成完整地址）：
+    #   智谱  base-url 已含版本段 /api/paas/v4  → embedding-path=embeddings
+    #   OpenAI base-url 不含版本段 api.openai.com → embedding-path=v1/embeddings
+    # 配错会拼出 /v4/v1/embeddings 这类 404 地址，Embedding 恒定失败并静默降级为伪向量（RAG 失去语义）。
+    embedding-path: ${ZX_LLM_EMBEDDING_PATH:embeddings}
     api-key: ${ZX_LLM_API_KEY:}
     model: ${ZX_LLM_MODEL:glm-4.5-air}
     temperature: ${ZX_LLM_TEMPERATURE:0.8}
     top-p: ${ZX_LLM_TOP_P:0.95}
     max-tokens: ${ZX_LLM_MAX_TOKENS:1024}
     enabled: ${ZX_LLM_ENABLED:false}
-    embedding-model: ${ZX_LLM_EMBEDDING_MODEL:text-embedding-3-small}
-    embedding-dimension: ${ZX_LLM_EMBEDDING_DIMENSION:1536}
+    # 向量模型与维度必须与 base-url 配套，且维度**必须等于 pgvector 列 knowledge_chunk.embedding 的维度**：
+    #   智谱  base-url=/api/paas/v4 → model=embedding-3（可选维度 256/512/1024/2048）
+    #   OpenAI base-url=api.openai.com → model=text-embedding-3-small（支持 dimensions 截断）
+    # 注意 pgvector 的 HNSW 索引对 vector 类型上限为 2000 维，故 2048 维不可索引；本项目取 1024。
+    embedding-model: ${ZX_LLM_EMBEDDING_MODEL:embedding-3}
+    embedding-dimension: ${ZX_LLM_EMBEDDING_DIMENSION:1024}
   rag:
     chunk-size: 500
     chunk-overlap: 50

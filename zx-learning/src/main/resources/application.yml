@@ -19,7 +19,7 @@ spring:
     name: learning-service
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/zx_learning?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/zx_learning?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${MYSQL_USERNAME}
     password: ${MYSQL_PASSWORD}
   data:
@@ -30,17 +30,21 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
-        enabled: false
+        # 关闭 Nacos 时靠各服务下方的 static simple.instances 直连；生产置 NACOS_ENABLED=true 并指向注册中心
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: ${NACOS_ENABLED:false}
       config:
-        enabled: false
+        enabled: ${NACOS_CONFIG_ENABLED:false}
     # 本地开发直连：关闭 Nacos 后，通过 SimpleDiscoveryClient 提供静态服务地址（生产环境删除此段并启用 Nacos）
     discovery:
       client:
         simple:
           instances:
             course-service:
-              - uri: http://localhost:8083
+              - uri: ${SVC_COURSE_URI:http://localhost:8083}
+            # 积分排行榜/讨论区需要回查用户昵称（失败自动降级为占位名）
+            user-service:
+              - uri: ${SVC_USER_URI:http://localhost:8082}
 
 # ------------------- RocketMQ（消费订单支付成功事件；name-server 触发 zx-common 自动装配） -------------------
 rocketmq:

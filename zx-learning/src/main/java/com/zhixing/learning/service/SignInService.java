@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 签到服务
@@ -21,9 +23,13 @@ public class SignInService {
     private static final int BASE_POINTS = 5;
 
     private final SignInMapper signInMapper;
+    private final PointsService pointsService;
 
     /**
      * 签到：当天只能签一次，连续签到天数递增。
+     * <p>
+     * 签到积分在落库后同步写入积分明细（幂等键 = signDate），
+     * 因此"签到得分"与"积分明细/排行榜"始终对得上账。
      */
     public SignIn checkIn(Long userId) {
         LocalDate today = LocalDate.now();
@@ -41,8 +47,12 @@ public class SignInService {
         record.setUserId(userId);
         record.setSignDate(today);
         record.setStreak(streak);
-        record.setPoints(calcPoints(streak));
+        int points = calcPoints(streak);
+        record.setPoints(points);
         signInMapper.insert(record);
+        // 签到积分计入积分明细（幂等：同一用户同一天只入账一次）
+        pointsService.award(userId, PointsService.SOURCE_SIGN, points,
+                "每日签到（连续 " + streak + " 天）", "SIGN:" + today);
         return record;
     }
 
@@ -69,5 +79,27 @@ public class SignInService {
         return signInMapper.selectList(new LambdaQueryWrapper<SignIn>()
                 .eq(SignIn::getUserId, userId)
                 .orderByDesc(SignIn::getSignDate));
+    }
+
+    /**
+     * 当前连续签到天数：今日未签从昨日起算，向前逐日回溯断档即止。
+     */
+    public int currentStreak(Long userId) {
+        List<SignIn> records = list(userId);
+        if (records.isEmpty()) {
+            return 0;
+        }
+        Set<LocalDate> dates = records.stream()
+                .map(SignIn::getSignDate).collect(Collectors.toSet());
+        LocalDate cursor = LocalDate.now();
+        if (!dates.contains(cursor)) {
+            cursor = cursor.minusDays(1);
+        }
+        int streak = 0;
+        while (dates.contains(cursor)) {
+            streak++;
+            cursor = cursor.minusDays(1);
+        }
+        return streak;
     }
 }

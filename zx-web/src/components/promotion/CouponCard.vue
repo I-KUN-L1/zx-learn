@@ -11,6 +11,8 @@ const props = defineProps<{
   coupon: CouponVO
   /** 是否已被当前用户领取（展示"已领取"标记） */
   claimed?: boolean
+  /** 已领取且未使用（展示"去使用"入口） */
+  usable?: boolean
 }>()
 
 /** 是否满减券（有门槛） */
@@ -26,10 +28,19 @@ const subText = computed(() =>
   hasThreshold.value ? `满${formatPrice(props.coupon.thresholdAmount)}可用` : '无门槛'
 )
 
-/** 发放状态文案 */
-const statusText = computed(() =>
-  props.coupon.status === 3 ? '未开始' : props.coupon.status === 2 ? '已暂停' : ''
-)
+/** 发放状态文案（对齐后端状态机：0 未开始 / 2 已结束 / 3 已下架） */
+const statusText = computed(() => {
+  switch (props.coupon.status) {
+    case 0:
+      return '未开始'
+    case 2:
+      return '已结束'
+    case 3:
+      return '已下架'
+    default:
+      return ''
+  }
+})
 
 /** 是否还有余量 */
 const soldOut = computed(() => (props.coupon.remainNum ?? 0) <= 0)
@@ -38,7 +49,7 @@ const soldOut = computed(() => (props.coupon.remainNum ?? 0) <= 0)
 <template>
   <article
     class="zx-card zx-coupon-card relative flex min-h-[132px] overflow-hidden"
-    :class="{ 'zx-coupon-card--disabled': statusText || soldOut || claimed }"
+    :class="{ 'zx-coupon-card--disabled': !usable && (statusText || soldOut || claimed) }"
   >
     <!-- 左侧金额区 -->
     <div class="zx-coupon-amount flex flex-col items-center justify-center text-center text-white">
@@ -53,13 +64,23 @@ const soldOut = computed(() => (props.coupon.remainNum ?? 0) <= 0)
         剩余 {{ coupon.remainNum }}/{{ coupon.totalNum }} 张
       </p>
       <p class="zx-text-secondary mt-1 text-xs">
-        发放 {{ coupon.issueBeginTime.slice(0, 10) }} ~ {{ coupon.issueEndTime.slice(0, 10) }}
+        发放 {{ (coupon.issueBeginTime || '').slice(0, 10) }} ~ {{ (coupon.issueEndTime || '').slice(0, 10) }}
       </p>
     </div>
 
     <!-- 右上角状态 -->
     <el-tag
-      v-if="claimed"
+      v-if="usable"
+      type="success"
+      effect="dark"
+      size="small"
+      class="absolute right-3 top-3"
+      round
+    >
+      可使用
+    </el-tag>
+    <el-tag
+      v-else-if="claimed"
       type="success"
       effect="dark"
       size="small"

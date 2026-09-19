@@ -3,7 +3,9 @@ package com.zhixing.trade.service;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.zhixing.trade.domain.po.CouponUseRecord;
+import com.zhixing.trade.domain.po.Order;
 import com.zhixing.trade.mapper.CouponUseRecordMapper;
+import com.zhixing.trade.mapper.OrderMapper;
 import com.zhixing.trade.mq.CouponMsg;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,7 +33,11 @@ class CouponUseRecordServiceTest {
     @Mock
     private CouponUseRecordMapper couponUseRecordMapper;
     @Mock
+    private OrderMapper orderMapper;
+    @Mock
     private IdempotencyGuard idempotencyGuard;
+    @Mock
+    private CouponStatusSyncer couponStatusSyncer;
 
     @InjectMocks
     private CouponUseRecordService service;
@@ -61,6 +68,8 @@ class CouponUseRecordServiceTest {
         service.submitUse(useMsg());
 
         verify(couponUseRecordMapper).insert(any(CouponUseRecord.class));
+        // 落库后回写券状态（兜底通道），否则券列表会一直显示"未使用"
+        verify(couponStatusSyncer).syncUsedAfterCommit(eq(88L), eq(1L), eq(9L), eq(1L));
     }
 
     @Test
@@ -71,6 +80,7 @@ class CouponUseRecordServiceTest {
         service.submitUse(useMsg());
 
         verify(couponUseRecordMapper, never()).insert(any(CouponUseRecord.class));
+        verify(couponStatusSyncer, never()).syncUsedAfterCommit(any(), any(), any(), any());
     }
 
     @Test
@@ -84,6 +94,22 @@ class CouponUseRecordServiceTest {
     }
 
     @Test
+    void submitUseSkipsWhenOrderAlreadyClosed() {
+        // 消息乱序：关单（退回）先被消费，后到的核销消息不得落库、更不得把券改回"已使用"，
+        // 否则会形成"订单已关闭、券却显示已使用"的漂移（且被对账任务固化）
+        when(couponUseRecordMapper.selectCount(any())).thenReturn(0L);
+        Order closed = new Order();
+        closed.setId(1L);
+        closed.setStatus(OrderService.STATUS_CLOSED);
+        when(orderMapper.selectById(1L)).thenReturn(closed);
+
+        service.submitUse(useMsg());
+
+        verify(couponUseRecordMapper, never()).insert(any(CouponUseRecord.class));
+        verify(couponStatusSyncer, never()).syncUsedAfterCommit(any(), any(), any(), any());
+    }
+
+    @Test
     void submitRefundUpdatesRecordOnFirstConsume() {
         when(idempotencyGuard.tryConsume(anyString(), anyString(), anyString())).thenReturn(true);
         CouponMsg refund = useMsg();
@@ -92,6 +118,8 @@ class CouponUseRecordServiceTest {
         service.submitRefund(refund);
 
         verify(couponUseRecordMapper).update(any(), any());
+        // 退回后回写券状态为未使用，让券重新可用
+        verify(couponStatusSyncer).syncRefundedAfterCommit(eq(1L));
     }
 
     @Test

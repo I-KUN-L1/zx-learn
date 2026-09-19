@@ -55,3 +55,70 @@ perf-test/results/
 ### 本地运行产物 ###
 .trae/
 data/
+
+### 一次性临时产物（非交付物，勿入库） ###
+# 手工调试脚本 / 中间件探测产物 / 封面暂存目录：曾误留在仓库根目录
+tmp-sse-test.mjs
+/tmp-*/
+*.dumpstream
+
+# =====================================================================
+# 隐私隔离补充（上线前安全审查 2026-09-18）
+# ---------------------------------------------------------------------
+# 原则：凡「凭据 / 本地配置 / 个人材料 / 真实数据导出 / 本地依赖」一律不入库。
+# 本机已实测：新增规则均通过 `git check-ignore -v` 校验生效。
+# =====================================================================
+
+### IDE 本地配置（含数据库连接串、凭据、本机绝对路径）###
+.idea/dataSources.xml
+.idea/dataSources.local.xml
+.idea/dataSources/
+.idea/workspace.xml
+.idea/shelf/
+
+### 本地环境变量覆盖（.env.example 为唯一入库模板）###
+.env.local
+.env.*.local
+zx-web/.env.local
+zx-web/.env.development.local
+zx-web/.env.production.local
+
+### 密钥 / 证书 / 凭据材料 ###
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+known_hosts
+authorized_keys
+*.secret
+*credentials*.json
+service-account*.json
+
+
+### 数据导出 / 备份（可能含真实用户数据）###
+*.dump
+*.sql.gz
+dumps/
+backup/
+*.bak
+
+### Python 字节码与测试缓存 ###
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+### JVM 崩溃转储与本地日志 ###
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+
+### 包管理器本地依赖（体积大，可由 lock 文件重装）###
+node_modules/
+.pnpm-store/
+
+### AI 协作工作数据（本地工作区记忆：含测试凭据与安全缺陷复盘，不入库）###
+.workbuddy/

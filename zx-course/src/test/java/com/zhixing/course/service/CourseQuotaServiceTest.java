@@ -1,6 +1,7 @@
 package com.zhixing.course.service;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.zhixing.api.dto.trade.QuotaMsg;
@@ -15,14 +16,18 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -147,6 +152,38 @@ class CourseQuotaServiceTest {
 
         verify(quotaRecordMapper).insert(any(CourseQuotaRecord.class));
         verify(courseMapper).update(any(), any(LambdaUpdateWrapper.class));
+    }
+
+    /**
+     * 回归：容错确认路径**不得泄漏** locked_count。
+     *
+     * <p>历史缺陷：该分支先 {@code locked_count + 1} 做原子超卖校验，却直接落 CONFIRMED 流水
+     * （没有 LOCKED 流水），而 locked_count 的唯一递减点都要求先有 LOCKED 记录 →
+     * 计数**只增不减**，逐步虚占名额；课程一旦设置 quota 就会越卖越"满"，
+     * 最终误报「课程名额已满」导致无法下单。
+     *
+     * <p>因此必须成对出现：一次 {@code +1}（原子占位校验）紧接一次 {@code -1}（归还占位）。
+     */
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void confirmRecoversWithoutLeakingLockedCount() {
+        when(quotaRecordMapper.selectOne(any())).thenReturn(null);
+        when(idempotencyGuard.tryConsume(any(), any(), any())).thenReturn(true);
+        when(courseQuotaMapper.selectOne(any())).thenReturn(new CourseQuota());
+        when(courseQuotaMapper.update(any(), any())).thenReturn(1);
+
+        service.confirm(msg());
+
+        ArgumentCaptor<Wrapper> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(courseQuotaMapper, times(2)).update(any(), captor.capture());
+        List<String> sets = captor.getAllValues().stream()
+                .map(w -> String.valueOf(w.getSqlSet()))
+                .toList();
+        assertEquals(2, sets.size(), "容错确认路径应恰好有 2 次 locked_count 更新（占位 + 归还）");
+        assertTrue(sets.stream().anyMatch(s -> s.contains("+ 1")),
+                "应有一次原子占位 +1，实际：" + sets);
+        assertTrue(sets.stream().anyMatch(s -> s.contains("GREATEST(locked_count - 1, 0)")),
+                "必须有一次归还占位 -1，否则 locked_count 泄漏，实际：" + sets);
     }
 
     // ==================== RELEASE ====================

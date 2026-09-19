@@ -46,7 +46,14 @@ export function setupRouterGuard(router: Router) {
     // 未登录访问业务模块：弹窗提醒后决定去向（公共模块自由浏览，不受影响）
     if (to.matched.some((r) => r.meta.requiresAuth) && !userStore.isLoggedIn) {
       const goLogin = await promptLogin()
-      return goLogin ? { path: '/login', query: { redirect: to.fullPath } } : false
+      if (goLogin) {
+        return { path: '/login', query: { redirect: to.fullPath } }
+      }
+      // 用户选择「暂不登录」：
+      // - 页面内跳转（已有渲染中的路由）→ 中止本次导航，留在原页；
+      // - 首次导航（直接输入/刷新受控地址，此时无任何已匹配路由）→ 回首页。
+      //   若此处直接 return false，RouterView 将无内容可渲染，整页会变成空白。
+      return router.currentRoute.value.matched.length > 0 ? false : { path: '/' }
     }
 
     // 角色级路由守卫：meta.roles 仅允许指定角色访问（如管理端 → admin；超管前端严格拦截，后端 403 兜底）

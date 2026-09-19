@@ -13,7 +13,9 @@ export function useAuth() {
       await router.replace('/password/first-change')
       return
     }
-    await router.replace(redirect || '/').catch(() => router.replace('/'))
+    // 角色默认首页：教师 → 教师工作台；其余（学员/管理员）→ 门户首页
+    const defaultPath = userStore.isTeacher ? '/teacher/courses' : '/'
+    await router.replace(redirect || defaultPath).catch(() => router.replace(defaultPath))
     void cellPhone
   }
 

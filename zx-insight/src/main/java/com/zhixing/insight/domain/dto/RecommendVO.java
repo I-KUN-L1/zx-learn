@@ -6,30 +6,25 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * 个性化学习路径推荐 VO
+ * 个性化学习路径推荐 VO（对齐前端 LearningPathVO 契约）。
  */
 @Data
 public class RecommendVO implements Serializable {
 
-    private Long userId;
+    /** 推荐理由/总结 */
+    private String reason;
 
-    /** 分析总结 */
-    private String summary;
+    /** 推荐学习路径步骤 */
+    private List<StepDTO> steps;
 
-    /** 薄弱点 */
-    private List<String> weakness;
-
-    /** 推荐课程列表 */
-    private List<CourseRecommendDTO> courses;
-
-    /** 学习建议 */
-    private List<String> suggestions;
-
+    /**
+     * 路径步骤项：{order, courseId, courseName, reason}
+     */
     @Data
-    public static class CourseRecommendDTO implements Serializable {
-        private Long id;
-        private String name;
-        private Long price;
+    public static class StepDTO implements Serializable {
+        private Integer order;
+        private Long courseId;
+        private String courseName;
         private String reason;
     }
 }

@@ -1,5 +1,7 @@
 package com.zhixing.aigc.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhixing.aigc.config.LlmProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,12 +25,16 @@ public class LlmClient {
 
     private final LlmProperties properties;
     private final WebClient webClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public LlmClient(LlmProperties properties) {
         this.properties = properties;
         this.webClient = WebClient.builder()
                 .baseUrl(properties.getBaseUrl())
                 .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
+                // 显式声明接受 SSE 流，避免部分厂商按普通 JSON 聚合响应
+                .defaultHeader("Accept", "text/event-stream")
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
                 .build();
     }
 
@@ -54,7 +60,13 @@ public class LlmClient {
     }
 
     /**
-     * 流式对话（SSE）
+     * 流式对话（SSE）。
+     * <p>
+     * 注意：{@code bodyToFlux(String.class)} 消费 {@code text/event-stream} 时，
+     * WebFlux 的 ServerSentEventHttpMessageReader 会自动解析事件并仅返回 <b>data 部分</b>
+     * （不带 {@code data:} 前缀）。因此此处直接解析 JSON，不可按原始行 {@code startsWith("data:")} 过滤，
+     * 否则会把所有事件过滤为空，导致回答空白。
+     * </p>
      */
     public Flux<String> chatStream(List<Map<String, String>> messages) {
         if (!properties.isEnabled() || properties.getApiKey().isBlank()) {
@@ -71,8 +83,14 @@ public class LlmClient {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(String.class)
-                .filter(line -> line.startsWith("data:") && !line.contains("[DONE]"))
-                .map(line -> parseDelta(line));
+                // data 已由 SSE reader 解出（无 data: 前缀）：仅过滤结束标记与非 JSON 心跳行
+                .filter(data -> data != null && !data.isBlank() && !"[DONE]".equals(data.trim()))
+                .mapNotNull(this::extractDelta)
+                .filter(content -> !content.isEmpty())
+                .onErrorResume(e -> {
+                    log.warn("流式调用失败，降级为错误提示：{}", e.getMessage());
+                    return Flux.just("抱歉，AI 服务暂时不可用，请稍后再试。");
+                });
     }
 
     /** 拼接补全接口地址：跳过头尾多余的斜杠，避免产生形如 v4//chat 的双斜杠路径 */
@@ -99,27 +117,28 @@ public class LlmClient {
             List<?> choices = (List<?>) resp.get("choices");
             Map<?, ?> choice = (Map<?, ?>) choices.get(0);
             Map<?, ?> message = (Map<?, ?>) choice.get("message");
-            return String.valueOf(message.get("content"));
+            Object content = message.get("content");
+            return content == null ? "" : String.valueOf(content);
         } catch (Exception e) {
             return "抱歉，我暂时无法回答这个问题。";
         }
     }
 
-    private String parseDelta(String line) {
+    /**
+     * 解析流式增量：提取 choices[0].delta.content。
+     * content 缺失或为 null（如首 chunk 仅含 role）时返回 null，由调用方跳过。
+     */
+    private String extractDelta(String data) {
         try {
-            String json = line.substring(line.indexOf('{'));
-            // 简化解析：直接截取 content 字段
-            int idx = json.indexOf("\"content\"");
-            if (idx < 0) {
-                return "";
+            JsonNode root = objectMapper.readTree(data);
+            JsonNode content = root.path("choices").path(0).path("delta").path("content");
+            if (content.isMissingNode() || content.isNull()) {
+                return null;
             }
-            int start = json.indexOf('"', json.indexOf(':', idx) + 1) + 1;
-            int end = json.indexOf('"', start);
-            return json.substring(start, end)
-                    .replace("\\n", "\n")
-                    .replace("\\\"", "\"");
+            return content.asText("");
         } catch (Exception e) {
-            return "";
+            // 心跳/注释等非 JSON 行：跳过
+            return null;
         }
     }
 

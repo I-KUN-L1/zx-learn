@@ -1,0 +1,102 @@
+=====================================================================
+知行智学 ZhiXing Learn · 前端测试报告
+生成时间: 2026-09-18 19:34:27
+工程目录: zx-web
+=====================================================================
+
+=== 阶段 1：工程结构与依赖 ===
+  [PASS] package.json 存在
+  [PASS] 依赖已安装（node_modules/vite 存在）
+  [PASS] vue-tsc 可执行入口存在
+  [PASS] Vue 3 主版本（package.json dependencies.vue = ^3）
+  [PASS] Element Plus 已声明
+  [PASS] Pinia 已声明
+  [PASS] vue-router 已声明
+  [PASS] DOMPurify 已声明（XSS 净化依赖）
+  [INFO] 视图/组件 .vue 文件数 = 42
+  [INFO] views 一级目录数 = 15
+
+=== 阶段 2：类型检查与构建 ===
+  [PASS] vue-tsc 类型检查 0 错误
+  [PASS] vite build 构建成功（exit=0）
+  [PASS] 构建产物 index.html 存在
+  [PASS] 构建产物 assets 目录存在
+  [INFO] 产物 JS 文件 56 个、CSS 文件 54 个（>1 说明做了分包）
+  [PASS] 已做代码分包（JS 文件数 > 5）
+  [INFO] dist 总体积 ≈ 2988KB
+  [INFO] 最大 JS 分片：element-B-9Dzf0p.js ≈ 933KB
+  [PASS] 无超大单分片（最大 JS < 2048KB）
+  [INFO] assets 全部 JS+CSS gzip 后 ≈ 804KB（首屏传输参考）
+
+=== 阶段 3：路由与页面覆盖 ===
+  [PASS] 路由表存在 src/router/index.ts
+  [PASS] 路由守卫存在 src/router/guard.ts
+  [INFO] 路由定义条数 = 33
+  [PASS] 路由数 ≥ 30（学员端+教师端+管理端）
+  [PASS] 路由守卫含未登录跳转逻辑
+  [PASS] 路由守卫已实现 beforeEach
+  [PASS] 404/错误页存在
+  [PASS] 懒加载路由（import() 动态导入）占比 > 0
+  [PASS] 关键页面已分包：course
+  [PASS] 关键页面已分包：learning
+  [PASS] 关键页面已分包：trade
+  [PASS] 关键页面已分包：profile
+  [PASS] 关键页面已分包：insight
+  [PASS] 关键页面已分包：exam
+
+=== 阶段 4：状态管理（Pinia + 模块级单例）===
+  [PASS] useOwnedCourses 单例存在（已拥有课程权威口径）
+  [PASS] useOwnedCourses 提供 markOwned 乐观更新
+  [PASS] useOwnedCourses 使用 Set 去重存储
+  [PASS] useMyCoupons 单例存在
+  [PASS] useMyCoupons 提供 markUsed
+  [PASS] 课程列表页读取全局已拥有状态
+  [INFO] 引用 useOwnedCourses 的视图数 = 3（列表/详情/我的课表应 ≥ 3）
+  [PASS] 已拥有状态被 ≥3 处视图共用（跨页联动）
+
+=== 阶段 5：UI / UX 状态与自适应 ===
+  [PASS] 统一空态组件 EmptyState 存在
+  [PASS] 骨架屏组件 SkeletonCards 存在
+  [PASS] 请求层 request.ts 存在
+  [INFO] 骨架屏（el-skeleton）使用文件数 = 4
+  [PASS] 存在加载态实现（骨架屏或 loading）
+  [INFO] v-loading 使用文件数 = 15
+  [INFO] 空态使用文件数 = 20
+  [PASS] 空态覆盖 ≥ 5 个页面
+  [INFO] 含错误处理/提示的文件数 = 37
+  [INFO] Tailwind 响应式断点类使用次数 = 74
+  [PASS] 使用了响应式断点（> 50 处）
+  [INFO] 源码内 @media 媒体查询条数 = 4（含 .vue scoped style）
+  [PASS] 全局样式含响应式媒体查询
+  [PASS] 溢出兜底类 zx-chart-box 已定义
+  [PASS] 构建产物包含图表溢出兜底类 zx-chart-box
+
+=== 阶段 6：前后端联调（请求封装与降级）===
+  [INFO] API 层文件数 = 16
+  [INFO] 请求封装文件 = src/api/mock/adapter.ts
+  [PASS] axios 实例已创建（统一 baseURL/拦截器）
+  [PASS] 存在响应拦截器（统一错误处理）
+  [PASS] 存在 401 处理（登录失效跳转）
+  [PASS] 请求超时已配置
+  [INFO] 响应体 code 判定命中 = 4 处
+  [PASS] 业务码判定读 body.code（非 HTTP 码）
+  [PASS] Long 精度处理：Id 类型为 number|string
+  [PASS] ID 比较使用 String() 归一（避免精度丢失）
+  [PASS] 学情接口降级处理（fail-open 零值兜底）
+  [PASS] AI 助手使用 fetch-event-source（SSE）
+  [PASS] SSE 事件 START/DELTA/END 已处理
+
+=== 阶段 7：前端性能与代码卫生 ===
+  [INFO] console.log 残留 = 0 处
+  [INFO] 显式 any 标注 = 0 处
+  [INFO] v-for 总数 = 68，疑似缺少 :key 的 = 0
+  [PASS] 列表渲染基本都带 :key（缺失数 = 0）
+  [INFO] vite.config 手动分包配置命中 = 2
+  [PASS] vite 构建已做分包/拆包配置
+  [PASS] 生产构建关闭 sourcemap（或未开启）
+
+---------------------------------------------------------------------
+断言总数: 56   通过: 56   失败: 0   无法判定(SKIP): 0
+结论: 全部通过 ✅
+原始日志目录: logs/verify-frontend/
+---------------------------------------------------------------------
