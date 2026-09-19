@@ -313,4 +313,16 @@
 
 ---
 
-*报告生成日期：2026-09-18 ｜ 生成依据：本轮实跑原始报告见 `docs/verify-*-report.txt`*
+## 八、后续更新
+
+**2026-09-19 补记**：第六章第 1 项「代码入库」**已完成**。
+
+- **清理**：移除 18 个 `zx-*/target` 编译产物（1.8 MB）；根目录 0 字节残留复核为 **0**；源码完整性核验 **396 个 `.java`** 无缺失。
+- **入库**：commit `6a7bf5b` — **310 文件，+32287 / -1225**；提交后 `git status --porcelain` = **0**。
+- **隐私**：`.workbuddy/`（含测试凭据与安全复盘）补充进 `.gitignore`；`.env`、`.bootstrap-credentials`、`.workbuddy/memory/*` 复核确认均**未入库**。
+- **状态**：`main` 领先 `origin/main` **3 个提交，待 push**。
+- **剩余建议**：push 后在干净 clone 目录复验 A/C 组（`dev-up-core.sh` → `verify-full-suite.sh` → `verify-frontend.sh`）。
+
+---
+
+*报告生成日期：2026-09-18 ｜ 最近更新：2026-09-19 ｜ 生成依据：本轮实跑原始报告见 `docs/verify-*-report.txt`*
